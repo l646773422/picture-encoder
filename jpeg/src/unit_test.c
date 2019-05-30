@@ -96,13 +96,23 @@ Void test_encode_huffman_table()
 
 Void test_value_to_code()
 {
+    bit_value t;
+    t = value_to_code(-3);
+    t = value_to_code(3);
+    t = value_to_code(-2);
+    t = value_to_code(2);
+    t = value_to_code(-65);
+    t = value_to_code(65);
+    t = value_to_code(-7);
+    t = value_to_code(7);
+    t = value_to_code(-1023);
+    t = value_to_code(1023);
 
-    value_to_code(-3);
 }
 
 Void test()
 {
-
+    test_value_to_code();
     test_encode_huffman_table();
     test_transform_8x8();
     test_encode_pic_header();

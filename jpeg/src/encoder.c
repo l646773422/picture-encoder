@@ -49,13 +49,21 @@ bit_value value_to_code(int32_t value)
     // 11      –2047..–1 024, 1024..2 047 
     int32_t temp = value > 0 ? value : -value;
     size_t pos = 0;
+    bit_value t = { 0, 0 };
+    if (value == 0)
+        return t;
 
     assert(temp < 2048);
 
     uint8_t bits = 0;
+    uint32_t num_of_negative = 0; // also is the start number of positive
     while (temp) { ++bits; temp >>= 1; }
-    temp = value > 0 ? value : -value;
-    //pos = 
+    num_of_negative = 1 << bits;
+    //temp = value > 0 ? value : -value;
+    //pos = temp - num_of_negative;
+    t.length = bits;
+    t.code = value > 0 ? value : (num_of_negative + value - 1);
+    return t;
 }
 
 // need header.
@@ -274,8 +282,9 @@ Void encode_frame_header(stream *bs, frame_header* header)
     // int component_id = 0;
     // for(component_id=0;i<component;i++)
     {
+        // 3 component are all same dimension (easy to implement, don't need to worry about scan order).
         U8(01);   // C1
-        U8(0x22); // H1|V1
+        U8(0x11); // H1|V1
         U8(0x00); // Tq1: specify quantization table for component.
 
         U8(02);   // C2
