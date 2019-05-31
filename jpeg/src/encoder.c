@@ -94,7 +94,7 @@ Void encode_huffman_table(stream *bs, frame_header* header)
     size = size + 2 + 17 * 4;
     // DHT
     U16(0xFFC4);
-    U16(size);
+    U16(size);  // total size
 
     // tables start here
     // DC luma
@@ -158,11 +158,58 @@ Void encode_comment(stream *bs, frame_header* header)
     // comments.
 }
 
-Void color_space_transform()
+Void color_space_transform(pix *RGB, pix *YUV, size_t Y_width, size_t Y_height, sampling_fomat format)
 {
-    // Y=0.299R'+0.587G'+0.114B'
-    // U=-0.147R'-0.289G'+0.436B'
-    // V=0.615R'-0.515G'-0.100B'
+    // Attention! type pix is unsigned char. Some problems occur when stored negetive pix;
+    size_t Y_resolution = Y_width * Y_height, U_resolution, V_resolution;
+    size_t U_width, U_height, U_step, V_width, V_height, V_step;
+    pix *R, *G, *B, *Y, *U, *V;
+    size_t idx;
+    switch (format)
+    {
+    case FORMAT_444: U_width = V_width = Y_width; U_height = V_height = Y_height; U_step = 1; V_step = 1; break;
+    case FORMAT_420: U_width = V_width = Y_width / 4; U_height = V_height = Y_height / 4; U_step = 2; V_step = 2; break;
+    case FORMAT_422: U_width = V_width = Y_width / 2; U_height = V_height = Y_height / 2; U_step = 1; V_step = 1; break;  // not supported
+        default:
+            break;
+    }
+    U_resolution = U_width * U_height;
+    V_resolution = V_width * V_height;
+    R = RGB; G = RGB + Y_resolution; B = G + Y_resolution;  // RGB 3 channel have same resolution.
+    Y = YUV; U = YUV + Y_resolution; V = U + U_resolution;
+
+    //  Y'= 16  + (  65.481*R' + 128.5530*G' +  24.966*B')
+    // Cb = 128 + ( -37.797*R' +  74.2030*G' + 112.000*B')
+    // Cr = 128 + ( 112.000*R' +  93.7860*G' +  18.214*B')
+
+    for (idx = 0; idx < Y_resolution; idx++) 
+    {
+        Y[idx] = 16 + (65.481*RGB[idx * 3] + 128.5530*RGB[idx * 3 + 1] + 24.966*RGB[idx * 3 + 2]);
+    }
+    for (idx = 0; idx < U_resolution; idx++)
+    {
+        U[idx] = 128 + (-37.797*RGB[idx * 3] + 74.2030*RGB[idx * 3 + 1] + 112.000*RGB[idx * 3 + 2]);
+    }
+    for (idx = 0; idx < V_resolution; idx++)
+    {
+        V[idx] = 128 + (112.000*RGB[idx * 3] + 93.7860*RGB[idx * 3 + 1] + 18.214*RGB[idx * 3 + 2]);
+    }
+
+    // Y = 0.299 * R + 0.587 * G + 0.114 * B
+    // Cb = -0.147 * R - 0.289 * G + 0.436 * B
+    // Cr = 0.615 * R - 0.515 * G - 0.100 * B
+    for (idx = 0; idx < Y_resolution; idx++) 
+    {
+        Y[idx] = 0.299*RGB[idx * 3] + 0.587*RGB[idx * 3 + 1] + 0.114*RGB[idx * 3 + 2];
+    }
+    for (idx = 0; idx < U_resolution; idx++)
+    {
+        U[idx] = -0.147*RGB[idx * 3] + -0.289*RGB[idx * 3 + 1] + 0.436*RGB[idx * 3 + 2];
+    }
+    for (idx = 0; idx < V_resolution; idx++)
+    {
+        V[idx] = 0.615*RGB[idx * 3] + -0.515*RGB[idx * 3 + 1] + -0.100*RGB[idx * 3 + 2];
+    }
 }
 
 Void encode_app_data(stream *bs)
@@ -173,6 +220,21 @@ Void encode_app_data(stream *bs)
 Void component_down_sampling()
 {
 
+}
+
+Void copy_block(pix *src, size_t pos_x, size_t pos_y, size_t pic_width, pix* target)
+{
+    int x, y;
+    assert(!(pos_x % 8) && !(pos_y % 8));
+    assert(pic_width > 0);
+
+    pix *tmp_src = src + pos_x + pos_y*pic_width;
+    //uint32_t *tmp_target = (uint32_t *)target;
+
+    for (y = 0; y < BLOCK_ROW; y++)
+    {
+        memcpy(target+y*BLOCK_ROW, tmp_src + y*pic_width, BLOCK_COLUMN*sizeof(pix));
+    }
 }
 
 Void transform_8x8(uint8_t *pixels, double *coefs)
@@ -191,7 +253,7 @@ Void transform_8x8(uint8_t *pixels, double *coefs)
     int x, y, u, v;
     double sum_temp;
     double au, av;
-    double sqrt_2 = 1/sqrt(2);
+    double _1_div_sqrt_2 = 1.0/sqrt(2);
 
     for (v = 0; v < BLOCK_ROW; v++)
     {
@@ -205,12 +267,110 @@ Void transform_8x8(uint8_t *pixels, double *coefs)
                     sum_temp += shifted_pixels[x + y * BLOCK_COLUMN] * cos((2 * x + 1)*u*PI / 16) * cos((2 * y + 1)*v*PI / 16);
                 }
             }
-            au = u == 0 ? sqrt_2 : 1;
-            av = v == 0 ? sqrt_2 : 1;
+            au = u == 0 ? _1_div_sqrt_2 : 1;
+            av = v == 0 ? _1_div_sqrt_2 : 1;
             coefs[u + v * BLOCK_COLUMN] = 0.25 * au * av * sum_temp;
         }
     }
+}
 
+Void quantization_8x8(frame_header *header, double *coefs, uint8_t *quant_table)
+{
+    int idx;
+    for (idx = 0; idx < BLOCK_PIXELS; idx++)
+    {
+        coefs[idx] = floor(coefs[idx] / quant_table[idx]+0.5);
+    }
+}
+
+Void encode_block(double *coefs, bit_value *dc_huffman_table, bit_value *ac_huffman_table, stream *bs)
+{
+    // The biggest problem is how to realize zigzag scan.
+    // I dont want a fixed array. (although look up is more efficient)
+    size_t zero_counter = 0, idx = 0;
+    size_t x = 0, y = 0; // (for AC, start position is (1, 0).
+    size_t scan_counter = 0;
+    uint8_t up = 1, down = 0;
+
+    uint8_t x_sequence[] = { 1,0,0,1,2,3,2,1,0,0,1,2,3,4,5,4,3,2,1,0,0,1,2,3,4,5,6,7,6,5,4,3,2,1,0,1,2,3,4,5,6,7,7,6,5,4,3,2,3,4,5,6,7,7,6,5,4,5,6,7,7,6,7 };
+    uint8_t y_sequence[] = { 0,1,2,1,0,0,1,2,3,4,3,2,1,0,0,1,2,3,4,5,6,5,4,3,2,1,0,0,1,2,3,4,5,6,7,7,6,5,4,3,2,1,2,3,4,5,6,7,7,6,5,4,3,4,5,6,7,7,6,5,6,7,7 };
+
+    // encode DC
+
+    // scan AC coefs;
+
+    for (scan_counter = 0; scan_counter < (BLOCK_PIXELS - 1); scan_counter ++)
+    {
+        printf("%d ", zigzag[x_sequence[scan_counter] + y_sequence[scan_counter] * BLOCK_COLUMN]);
+    }
+
+    // There get a zigzag scan.
+
+    // 0, 1, 5, 6, 14, 15, 27, 28,
+    // 2, 4, 7, 13, 16, 26, 29, 42,
+    // 3, 8, 12, 17, 25, 30, 41, 43,
+    // 9, 11, 18, 24, 31, 40, 44, 53,
+    // 10, 19, 23, 32, 39, 45, 52, 54,
+    // 20, 22, 33, 38, 46, 51, 55, 60,
+    // 21, 34, 37, 47, 50, 56, 59, 61,
+    // 35, 36, 48, 49, 57, 58, 62, 63
+
+    //while (scan_counter < (BLOCK_PIXELS - 1) && !(x == BLOCK_COLUMN - 1 && y == BLOCK_ROW - 1))
+    //{
+    //    while (up)
+    //    {
+    //        if (x == BLOCK_COLUMN - 1 || y == 0)
+    //        {
+    //            down = 1; up = 0; ++scan_counter;
+    //        }
+    //        if (x == BLOCK_COLUMN - 1)
+    //        {
+    //            ++y;
+    //            printf("%d,", y);
+    //            break;
+    //        }
+    //        if (y == 0)
+    //        {
+    //            ++x;
+    //            printf("%d,", y);
+    //            break;
+    //        }
+
+    //        x += 1;
+    //        y -= 1;
+    //        ++scan_counter;
+    //        printf("%d,", y);
+    //    }
+    //    while (down)
+    //    {
+    //        if (x == 0 || y == BLOCK_ROW - 1)
+    //        {
+    //            down = 0; up = 1; ++scan_counter;
+    //        }
+    //        if (y == BLOCK_ROW - 1)
+    //        {
+    //            ++x;
+    //            printf("%d,", y);
+    //            break;
+    //        }
+    //        if (x == 0)
+    //        {
+    //            ++y;
+    //            printf("%d,", y);
+    //            break;
+    //        }
+
+    //        x -= 1;
+    //        y += 1;
+    //        ++scan_counter;
+    //        printf("%d,", y);
+    //    }
+    //}
+
+    for (idx = 0; idx < BLOCK_PIXELS; idx++)
+    {
+        zigzag[idx];
+    }
 }
 
 Void encode_restart(stream *bs, frame_header* header)

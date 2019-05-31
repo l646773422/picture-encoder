@@ -11,7 +11,8 @@
 
 #include <assert.h>
 #include "common.h"
-#include "stdlib.h"
+#include <stdlib.h>
+#include <stdio.h>
 
 #if __BYTE_ORDER == __BIG_ENDIAN
 //#   define SWAP32(x) (uint32_t)(x)
@@ -98,12 +99,12 @@ static uint32_t Standard_AC_Chrominance_Values[] =
 };
 
 static uint8_t Standard_Luma_Quantization_Table[] = {
-    16, 11, 10, 16, 124, 140, 151, 161,
-    12, 12, 14, 19, 126, 158, 160, 155,
-    14, 13, 16, 24, 140, 157, 169, 156,
-    14, 17, 22, 29, 151, 187, 180, 162,
-    18, 22, 37, 56, 168, 109, 103, 177,
-    24, 35, 55, 64, 181, 104, 113, 192,
+    16, 11, 10, 16,  24,  40,  51,  61,
+    12, 12, 14, 19,  26,  58,  60,  55,
+    14, 13, 16, 24,  40,  57,  69,  56,
+    14, 17, 22, 29,  51,  87,  80,  62,
+    18, 22, 37, 56,  68, 109, 103,  77,
+    24, 35, 55, 64,  81, 104, 113,  92,
     49, 64, 78, 87, 103, 121, 120, 101,
     72, 92, 95, 98, 112, 100, 103, 199,
 };
@@ -123,7 +124,7 @@ static uint8_t Standard_Chroma_Quantization_Table[] = {
 #define U1(v) bs_put_bits(bs, 1, v)
 #define U8(v) bs_put_bits(bs, 8, v)
 #define U16(v) bs_put_bits(bs, 16, v)
-void bs_put_bits(stream *bs, unsigned n, unsigned val);
+void bs_put_bits(stream *bs, uint8_t n, uint32_t val);
 
 // from https://en.wikipedia.org/wiki/JPEG
 // Short name	Bytes	Payload	Name	Comments
@@ -152,13 +153,15 @@ Void encode_restart(stream *bs, frame_header* header);
 
 Void encode_comment(stream *bs, frame_header* header);
 
-Void color_space_transform();
+Void color_space_transform(pix *RGB, pix *YUV, size_t Y_width, size_t Y_height, sampling_fomat format);
 
 Void encode_app_data(stream *bs);
 
+Void quantization_8x8(frame_header *header, double *coefs, uint8_t *quant_table);
 Void component_down_sampling();
+Void copy_block(pix *src, size_t pos_x, size_t pos_y, size_t pic_width, pix* target);
 Void transform_8x8(uint8_t *pixels, double *coefs);
-
+Void encode_block(double *coefs, bit_value *dc_huffman_table, bit_value *ac_huffman_table, stream *bs);
 bit_value value_to_code(int32_t value);
 
 Void calc_huffman_table(bit_value *table, uint32_t *BITS, uint32_t *HUFFVAL);

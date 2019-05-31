@@ -39,6 +39,10 @@ typedef enum coef_type{
     DC=0, AC, DEFAULT
 }coef_type;
 
+typedef enum sampling_fomat {
+    FORMAT_444, FORMAT_420, FORMAT_422, UNKNOWN
+}sampling_fomat;
+
 //typedef struct huffman_table{
 //    uint8_t tabel_idx;
 //    coef_type type;
@@ -62,6 +66,12 @@ typedef struct quantization_table{
 }quantization_table;
 
 typedef struct frame_header{
+    // basic information
+    sampling_fomat sample_format;
+    size_t frame_width, frame_height;
+
+    pix *src_rgb;
+
     uint8_t hf_tables; // in baseline, only support 4 huffman tables.
     bit_value DC_luma_table[12];
     bit_value DC_chroma_table[12];
