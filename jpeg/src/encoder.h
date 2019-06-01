@@ -37,8 +37,9 @@ cache |= (uint32_t)val << shift;
 //  Standard_DC_Luminance_Codes 这个数组记录使用 16 个比特表达的节点有 R 个
 // {0, 0, 7 ..} 的意思是总共有长度为3的value有7个，其中value从Standard_DC_Luminance_Values数组中读取。
 // 因此有 sum of Standard_DC_Luminance_Codes[i] = length of (Standard_DC_Luminance_Values)
-static uint32_t Standard_DC_Luminance_Codes[] = { 0, 0, 7, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0 };
-static uint32_t Standard_DC_Luminance_Values[] = { 4, 5, 3, 2, 6, 1, 0, 7, 8, 9, 10, 11 };
+
+static uint32_t Standard_DC_Luminance_Codes[] = { 0, 1, 5, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0 };
+static uint32_t Standard_DC_Luminance_Values[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };
 
 //-------------------------------------------------------------------------------
 static uint32_t Standard_DC_Chrominance_Codes[] = { 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0 };
@@ -120,12 +121,6 @@ static uint8_t Standard_Chroma_Quantization_Table[] = {
     99, 99, 99, 99, 99, 99, 99, 99,
 };
 
-#define U(n, v) bs_put_bits(bs, n, v)
-#define U1(v) bs_put_bits(bs, 1, v)
-#define U8(v) bs_put_bits(bs, 8, v)
-#define U16(v) bs_put_bits(bs, 16, v)
-void bs_put_bits(stream *bs, uint8_t n, uint32_t val);
-
 // from https://en.wikipedia.org/wiki/JPEG
 // Short name	Bytes	Payload	Name	Comments
 // SOI	0xFF, 0xD8	none	Start Of Image	
@@ -161,13 +156,15 @@ Void quantization_8x8(frame_header *header, double *coefs, uint8_t *quant_table)
 Void component_down_sampling();
 Void copy_block(pix *src, size_t pos_x, size_t pos_y, size_t pic_width, pix* target);
 Void transform_8x8(uint8_t *pixels, double *coefs);
-Void encode_block(double *coefs, bit_value *dc_huffman_table, bit_value *ac_huffman_table, stream *bs);
-bit_value value_to_code(int32_t value);
+Void encode_block(double *coefs, int16_t prev_dc, bit_value *dc_huffman_table, bit_value *ac_huffman_table, stream *bs);
+int value_to_code(int32_t value, bit_value *target, coef_type coef);
 
 Void calc_huffman_table(bit_value *table, uint32_t *BITS, uint32_t *HUFFVAL);
 
-Void init_quantization_table(quantization_table *table, uint8_t *coefs);
+Void write_bit_stream(FILE* fp, stream *bs);
 
+Void init_quantization_table(quantization_table *table, uint8_t *coefs);
+Void init_zigzag_table(uint8_t *table);
 Void init_frame_header(frame_header *header);
 
 Void entropy_encoding();

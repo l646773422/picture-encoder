@@ -7,18 +7,20 @@
 #define BLOCK_COLUMN 8
 #define BLOCK_ROW 8
 #define BLOCK_PIXELS 64
+#define BIT_BUFF_SIZE 512
 #define PI 3.14159265358979323846
 
-static const unsigned char zigzag[64] =
+// Be careful! Only AC coef need this. So the index should start as 1.
+static const uint8_t zigzag[64] =
 {
-    0,   1,  5,  6, 14, 15, 27, 28,
-    2,   4,  7, 13, 16, 26, 29, 42,
-    3,   8, 12, 17, 25, 30, 41, 43,
-    9,  11, 18, 24, 31, 40, 44, 53,
-    10, 19, 23, 32, 39, 45, 52, 54,
-    20, 22, 33, 38, 46, 51, 55, 60,
-    21, 34, 37, 47, 50, 56, 59, 61,
-    35, 36, 48, 49, 57, 58, 62, 63
+    0, 1, 8, 16, 9, 2, 3, 10, 17,
+    24, 32, 25, 18, 11, 4, 5, 12,
+    19, 26, 33, 40, 48, 41, 34, 27,
+    20, 13, 6, 7, 14, 21, 28, 35,
+    42, 49, 56, 57, 50, 43, 36, 29,
+    22, 15, 23, 30, 37, 44, 51, 58,
+    59, 52, 45, 38, 31, 39, 46, 53,
+    60, 61, 54, 47, 55, 62, 63
 };
 
 typedef void Void;
@@ -36,7 +38,7 @@ typedef struct stream
 }stream;
 
 typedef enum coef_type{
-    DC=0, AC, DEFAULT
+    DC_COEF=0, AC_COEF, DEFAULT
 }coef_type;
 
 typedef enum sampling_fomat {
@@ -83,11 +85,33 @@ typedef struct frame_header{
     quantization_table chroma_quantization_table;
 }frame_header;
 
+#define U(n, v) bs_put_bits(bs, n, v)
+#define U1(v) bs_put_bits(bs, 1, v)
+#define U8(v) bs_put_bits(bs, 8, v)
+#define U16(v) bs_put_bits(bs, 16, v)
+#define CODE_BIT_VALUE(b_v) bs_put_bits(bs, b_v.length, b_v.code);
+
+Void bs_put_bits(stream *bs, uint8_t n, uint32_t val)
+{
+    assert(!(val >> n));
+    bs->shift -= n;
+    assert((unsigned)n <= 32);
+    if (bs->shift < 0)
+    {
+        assert(-bs->shift < 32);
+        bs->cache |= val >> -bs->shift;
+        *bs->buf++ = SWAP32(bs->cache);
+        bs->shift = 32 + bs->shift;
+        bs->cache = 0;
+    }
+    bs->cache |= val << bs->shift;
+}
+
 static Void init_bit_stream(stream* bs)
 {
     memset(bs, 0, sizeof(stream));
-    bs->origin = (bs_t*)malloc(sizeof(bs_t) * 512);
-    memset(bs->origin, 0, sizeof(bs_t) * 512);
+    bs->origin = (bs_t*)malloc(sizeof(bs_t) * BIT_BUFF_SIZE);
+    memset(bs->origin, 0, sizeof(bs_t) * BIT_BUFF_SIZE);
 
     bs->shift = 32;
     bs->buf = bs->origin;
@@ -97,7 +121,7 @@ static Void clear_bit_stream(stream* bs)
 {
     bs->buf = bs->origin;
     bs->cache = 0;
-    bs->shift = 0;
+    bs->shift = 32;
 }
 
 static Void destory_bit_stream(stream* bs)
@@ -108,5 +132,7 @@ static Void destory_bit_stream(stream* bs)
 
 static Void flush_stream(stream* bs)
 {
-
+    *bs->buf++ = SWAP32(bs->cache);
+    bs->cache = 0;
+    bs->shift = 32;
 }

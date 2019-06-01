@@ -2,22 +2,6 @@
 #include <memory.h>
 #include <math.h>
 
-Void bs_put_bits(stream *bs, uint8_t n, uint32_t val)
-{
-    assert(!(val >> n));
-    bs->shift -= n;
-    assert((unsigned)n <= 32);
-    if (bs->shift < 0)
-    {
-        assert(-bs->shift < 32);
-        bs->cache |= val >> -bs->shift;
-        *bs->buf++ = SWAP32(bs->cache);
-        bs->shift = 32 + bs->shift;
-        bs->cache = 0;
-    }
-    bs->cache |= val << bs->shift;
-}
-
 Void entropy_encoding()
 {
     // The previous quantized DC coefficient is used to predict the current quantized DC coefficient. 
@@ -31,7 +15,7 @@ Void entropy_encoding()
 
 }
 
-bit_value value_to_code(int32_t value)
+int value_to_code(int32_t value, bit_value *target, coef_type type)
 {
     // a DC table demo.
     // SSSS DIFF values                       SSSS  AC coefficients
@@ -49,9 +33,14 @@ bit_value value_to_code(int32_t value)
     // 11      –2047..–1 024, 1024..2 047 
     int32_t temp = value > 0 ? value : -value;
     size_t pos = 0;
-    bit_value t = { 0, 0 };
+    assert(type == AC_COEF || type == DC_COEF);
+
     if (value == 0)
-        return t;
+    {
+        assert(type == AC_COEF);
+        memset(target, 0, sizeof(bit_value));
+        return 0;
+    }
 
     assert(temp < 2048);
 
@@ -61,9 +50,10 @@ bit_value value_to_code(int32_t value)
     num_of_negative = 1 << bits;
     //temp = value > 0 ? value : -value;
     //pos = temp - num_of_negative;
-    t.length = bits;
-    t.code = value > 0 ? value : (num_of_negative + value - 1);
-    return t;
+    target->length = bits;
+    target->code = value > 0 ? value : (num_of_negative + value - 1);
+
+    return 0;
 }
 
 // need header.
@@ -283,93 +273,146 @@ Void quantization_8x8(frame_header *header, double *coefs, uint8_t *quant_table)
     }
 }
 
-Void encode_block(double *coefs, bit_value *dc_huffman_table, bit_value *ac_huffman_table, stream *bs)
+Void init_zigzag_table(uint8_t *table)
+{
+
+    // There get a zigzag scan.
+    //uint8_t scan_sequence[] = {
+    //    0,  1,  5,  6,  14, 15, 27, 28,
+    //    2,  4,  7,  13, 16, 26, 29, 42,
+    //    3,  8,  12, 17, 25, 30, 41, 43,
+    //    9,  11, 18, 24, 31, 40, 44, 53,
+    //    10, 19, 23, 32, 39, 45, 52, 54,
+    //    20, 22, 33, 38, 46, 51, 55, 60,
+    //    21, 34, 37, 47, 50, 56, 59, 61,
+    //    35, 36, 48, 49, 57, 58, 62, 63
+    //};
+
+    size_t x, y;
+    size_t scan_counter = 1; // Scan start from AC.
+    uint8_t up = 1, down = 0;
+    while (scan_counter < (BLOCK_PIXELS - 1) && !(x == BLOCK_COLUMN - 1 && y == BLOCK_ROW - 1))
+    {
+        while (up)
+        {
+            if (x == BLOCK_COLUMN - 1 || y == 0)
+            {
+                down = 1; up = 0; ++scan_counter;
+            }
+            if (x == BLOCK_COLUMN - 1)
+            {
+                ++y;
+                table[scan_counter] = x + y*BLOCK_COLUMN;
+                //printf("%d,", scan_sequence[x + y*BLOCK_COLUMN]);
+                break;
+            }
+            if (y == 0)
+            {
+                ++x;
+                table[scan_counter] = x + y*BLOCK_COLUMN;
+                break;
+            }
+
+            x += 1;
+            y -= 1;
+            ++scan_counter;
+            table[scan_counter] = x + y*BLOCK_COLUMN;
+        }
+        while (down)
+        {
+            if (x == 0 || y == BLOCK_ROW - 1)
+            {
+                down = 0; up = 1; ++scan_counter;
+            }
+            if (y == BLOCK_ROW - 1)
+            {
+                ++x;
+                table[scan_counter] = x + y*BLOCK_COLUMN;
+                break;
+            }
+            if (x == 0)
+            {
+                ++y;
+                table[scan_counter] = x + y*BLOCK_COLUMN;
+                break;
+            }
+
+            x -= 1;
+            y += 1;
+            ++scan_counter;
+            table[scan_counter] = x + y*BLOCK_COLUMN;
+        }
+    }
+}
+
+Void encode_block(double *coefs, int16_t prev_dc, bit_value *dc_huffman_table, bit_value *ac_huffman_table, stream *bs)
 {
     // The biggest problem is how to realize zigzag scan.
     // I dont want a fixed array. (although look up is more efficient)
-    size_t zero_counter = 0, idx = 0;
-    size_t x = 0, y = 0; // (for AC, start position is (1, 0).
-    size_t scan_counter = 0;
-    uint8_t up = 1, down = 0;
 
-    uint8_t x_sequence[] = { 1,0,0,1,2,3,2,1,0,0,1,2,3,4,5,4,3,2,1,0,0,1,2,3,4,5,6,7,6,5,4,3,2,1,0,1,2,3,4,5,6,7,7,6,5,4,3,2,3,4,5,6,7,7,6,5,4,5,6,7,7,6,7 };
-    uint8_t y_sequence[] = { 0,1,2,1,0,0,1,2,3,4,3,2,1,0,0,1,2,3,4,5,6,5,4,3,2,1,0,0,1,2,3,4,5,6,7,7,6,5,4,3,2,1,2,3,4,5,6,7,7,6,5,4,3,4,5,6,7,7,6,5,6,7,7 };
+    size_t zero_counter = 0, idx = 0;
+    size_t scan_counter = 1; // scan start from AC.
+
+    // Finfally made array. At least now I know how to create such array.
+    //uint8_t x_sequence[] = { 1,0,0,1,2,3,2,1,0,0,1,2,3,4,5,4,3,2,1,0,0,1,2,3,4,5,6,7,6,5,4,3,2,1,0,1,2,3,4,5,6,7,7,6,5,4,3,2,3,4,5,6,7,7,6,5,4,5,6,7,7,6,7 };
+    //uint8_t y_sequence[] = { 0,1,2,1,0,0,1,2,3,4,3,2,1,0,0,1,2,3,4,5,6,5,4,3,2,1,0,0,1,2,3,4,5,6,7,7,6,5,4,3,2,1,2,3,4,5,6,7,7,6,5,4,3,4,5,6,7,7,6,5,6,7,7 };
+
 
     // encode DC
+    int16_t dc_diff = (int16_t)coefs[0] - prev_dc;
+    bit_value coef_result, huffman_code;
+    value_to_code(dc_diff, &coef_result, DC_COEF);
+    // after get bits of code, check huffman table for huffman code.
+    memcpy(&huffman_code, dc_huffman_table + coef_result.length, sizeof(bit_value));
+    U(huffman_code.length, huffman_code.code);
+    U(coef_result.length, coef_result.code);
 
     // scan AC coefs;
-
-    for (scan_counter = 0; scan_counter < (BLOCK_PIXELS - 1); scan_counter ++)
+    size_t tmp_scan = -1;
+    int16_t coef;
+    for (scan_counter = 1; scan_counter < BLOCK_PIXELS; scan_counter++)
     {
-        printf("%d ", zigzag[x_sequence[scan_counter] + y_sequence[scan_counter] * BLOCK_COLUMN]);
-    }
+        //printf("%d ", zigzag[x_sequence[scan_counter] + y_sequence[scan_counter] * BLOCK_COLUMN]);
+        idx = zigzag[scan_counter];
+        coef = (int16_t)coefs[idx];
+        if (coef == 0)
+        {
+            zero_counter += 1;
+            if (zero_counter == 16)  // successive 16 zero will be encoded as ZRL (15, 0)
+            {
+                // check wether zero remain behind. If all zero, encode EOB (end of block)
+                // TODO: find the last non-zero element at scan start! And check (tmp_scan == last_non_zero) will know encode EOB or ZRL.
+                for (tmp_scan = scan_counter; tmp_scan < BLOCK_PIXELS; tmp_scan++)
+                    if (coefs[zigzag[tmp_scan]] != 0) break;
+                if (tmp_scan == BLOCK_PIXELS)
+                {
+                    // encode EOB
+                    memcpy(&huffman_code, ac_huffman_table, sizeof(bit_value));
+                    U(huffman_code.length, huffman_code.code); // code EOB only.
+                }
+                else
+                {
+                    memcpy(&huffman_code, ac_huffman_table + 0xF0, sizeof(bit_value));
+                    U(huffman_code.length, huffman_code.code); // code ZRL only.
+                }
+                scan_counter = tmp_scan;
+                zero_counter = 0;
+            }
+        }
+        else
+        {
+            // 
+            value_to_code(coef, &coef_result, AC_COEF);
+            uint8_t symbol = 0;
+            symbol |= zero_counter << 4;
+            symbol |= coef_result.length & 0x0F;
+            zero_counter = 0;
+            // after get bits of code, check huffman table for huffman code.
+            memcpy(&huffman_code, ac_huffman_table + symbol, sizeof(bit_value));
+            U(huffman_code.length, huffman_code.code);
+            U(coef_result.length, coef_result.code);
 
-    // There get a zigzag scan.
-
-    // 0, 1, 5, 6, 14, 15, 27, 28,
-    // 2, 4, 7, 13, 16, 26, 29, 42,
-    // 3, 8, 12, 17, 25, 30, 41, 43,
-    // 9, 11, 18, 24, 31, 40, 44, 53,
-    // 10, 19, 23, 32, 39, 45, 52, 54,
-    // 20, 22, 33, 38, 46, 51, 55, 60,
-    // 21, 34, 37, 47, 50, 56, 59, 61,
-    // 35, 36, 48, 49, 57, 58, 62, 63
-
-    //while (scan_counter < (BLOCK_PIXELS - 1) && !(x == BLOCK_COLUMN - 1 && y == BLOCK_ROW - 1))
-    //{
-    //    while (up)
-    //    {
-    //        if (x == BLOCK_COLUMN - 1 || y == 0)
-    //        {
-    //            down = 1; up = 0; ++scan_counter;
-    //        }
-    //        if (x == BLOCK_COLUMN - 1)
-    //        {
-    //            ++y;
-    //            printf("%d,", y);
-    //            break;
-    //        }
-    //        if (y == 0)
-    //        {
-    //            ++x;
-    //            printf("%d,", y);
-    //            break;
-    //        }
-
-    //        x += 1;
-    //        y -= 1;
-    //        ++scan_counter;
-    //        printf("%d,", y);
-    //    }
-    //    while (down)
-    //    {
-    //        if (x == 0 || y == BLOCK_ROW - 1)
-    //        {
-    //            down = 0; up = 1; ++scan_counter;
-    //        }
-    //        if (y == BLOCK_ROW - 1)
-    //        {
-    //            ++x;
-    //            printf("%d,", y);
-    //            break;
-    //        }
-    //        if (x == 0)
-    //        {
-    //            ++y;
-    //            printf("%d,", y);
-    //            break;
-    //        }
-
-    //        x -= 1;
-    //        y += 1;
-    //        ++scan_counter;
-    //        printf("%d,", y);
-    //    }
-    //}
-
-    for (idx = 0; idx < BLOCK_PIXELS; idx++)
-    {
-        zigzag[idx];
+        }
     }
 }
 
@@ -418,7 +461,7 @@ Void encode_quantization_table(stream *bs, frame_header* header)
 
 Void encode_frame_header(stream *bs, frame_header* header)
 {
-
+    // frame header contain several parts.
     // start code
     U8(0xFF);
     U8(0xD8);
@@ -432,8 +475,8 @@ Void encode_frame_header(stream *bs, frame_header* header)
     
     U8(0x08);// P: 8 bits. Precision.
     
-    U16(0x0808); // Y: 16 bits. Number of lines. (height)
-    U16(0x0808); // X: 16 bits. Number of column. (width)
+    U16(header->frame_height); // Y: 16 bits. Number of lines. (height)
+    U16(header->frame_width); // X: 16 bits. Number of column. (width)
 
     
     U8(0x03);// Nf: 8bits. number of component in img.
@@ -455,6 +498,12 @@ Void encode_frame_header(stream *bs, frame_header* header)
         U8(0x11); // H3|V3
         U8(0x01); // Tq1: specify quantization table for component.
     }
+}
+
+Void write_bit_stream(FILE* fp, stream *bs)
+{
+    fwrite(bs, sizeof(bs_t), bs->buf - bs->origin, fp);
+    bs->buf = bs->origin;
 }
 
 Void init_frame_header(frame_header *header)

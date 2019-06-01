@@ -33,10 +33,10 @@ do {\
         }\
     } while(0)
 
-#define TEST_COEF_TO_CODE(value, expect_length, expect_code) \
+#define TEST_COEF_TO_CODE(type, value, expect_length, expect_code) \
     do{\
         bit_value t; \
-        t = value_to_code(value);\
+        value_to_code(value, &t, type);\
         EXPECT_EQ_BASE((t.length == expect_length), expect_length, t.length, "%d"); \
         EXPECT_EQ_BASE((t.code == expect_code), expect_code, t.code, "%04X"); \
     }while(0)
@@ -114,10 +114,10 @@ Void test_encode_huffman_table()
 
 Void test_coef_to_code()
 {
-    TEST_COEF_TO_CODE(-1, 1, 0);
-    TEST_COEF_TO_CODE(1, 1, 1);
-    TEST_COEF_TO_CODE(-3, 2, 0);
-    TEST_COEF_TO_CODE(2, 2, 2);
+    TEST_COEF_TO_CODE(AC_COEF, -1, 1, 0);
+    TEST_COEF_TO_CODE(AC_COEF, 1, 1, 1);
+    TEST_COEF_TO_CODE(AC_COEF, -3, 2, 0);
+    TEST_COEF_TO_CODE(AC_COEF, 2, 2, 2);
 }
 
 Void test_color_space_transform()
@@ -233,7 +233,7 @@ Void test_copy_block()
 
 Void test_encode_block()
 {
-    encode_block(NULL, NULL, NULL, NULL);
+    encode_block(NULL, 0, NULL, NULL, NULL);
 }
 
 Void test()
