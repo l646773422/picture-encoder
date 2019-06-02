@@ -1,3 +1,6 @@
+#ifndef JPG_COMMON_H
+#define JPG_COMMON_H
+
 #include <stdint.h>
 #include <stdlib.h> 
 #include <memory.h>
@@ -9,6 +12,13 @@
 #define BLOCK_PIXELS 64
 #define BIT_BUFF_SIZE 512
 #define PI 3.14159265358979323846
+
+#if __BYTE_ORDER == __BIG_ENDIAN
+//#   define SWAP32(x) (uint32_t)(x)
+#define SWAP32(x) (uint32_t)((((x) >> 24) & 0xFF) | (((x) >> 8) & 0xFF00) | (((x) << 8) & 0xFF0000) | ((x & 0xFF) << 24))
+#else
+#define SWAP32(x) (uint32_t)((((x) >> 24) & 0xFF) | (((x) >> 8) & 0xFF00) | (((x) << 8) & 0xFF0000) | ((x & 0xFF) << 24))
+#endif
 
 // Be careful! Only AC coef need this. So the index should start as 1.
 static const uint8_t zigzag[64] =
@@ -91,7 +101,7 @@ typedef struct frame_header{
 #define U16(v) bs_put_bits(bs, 16, v)
 #define CODE_BIT_VALUE(b_v) bs_put_bits(bs, b_v.length, b_v.code);
 
-Void bs_put_bits(stream *bs, uint8_t n, uint32_t val)
+static Void bs_put_bits(stream *bs, uint8_t n, uint32_t val)
 {
     assert(!(val >> n));
     bs->shift -= n;
@@ -136,3 +146,5 @@ static Void flush_stream(stream* bs)
     bs->cache = 0;
     bs->shift = 32;
 }
+
+#endif

@@ -51,7 +51,7 @@ do {\
 
 Void test_transform_8x8()
 {
-    uint8_t pixels[BLOCK_PIXELS] = {
+    double pixels[BLOCK_PIXELS] = {
         52, 55, 61, 66, 70, 61, 64, 73,
         63, 59, 55, 90, 109, 85, 69, 72,
         62, 59, 68, 113, 144, 104, 66, 73,

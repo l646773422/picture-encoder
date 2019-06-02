@@ -148,12 +148,13 @@ Void encode_comment(stream *bs, frame_header* header)
     // comments.
 }
 
-Void color_space_transform(pix *RGB, pix *YUV, size_t Y_width, size_t Y_height, sampling_fomat format)
+Void color_space_transform(pix *RGB, double *YUV, size_t Y_width, size_t Y_height, sampling_fomat format)
 {
     // Attention! type pix is unsigned char. Some problems occur when stored negetive pix;
     size_t Y_resolution = Y_width * Y_height, U_resolution, V_resolution;
     size_t U_width, U_height, U_step, V_width, V_height, V_step;
-    pix *R, *G, *B, *Y, *U, *V;
+    pix *R, *G, *B;
+    double *Y, *U, *V;
     size_t idx;
     switch (format)
     {
@@ -172,34 +173,42 @@ Void color_space_transform(pix *RGB, pix *YUV, size_t Y_width, size_t Y_height, 
     // Cb = 128 + ( -37.797*R' +  74.2030*G' + 112.000*B')
     // Cr = 128 + ( 112.000*R' +  93.7860*G' +  18.214*B')
 
-    for (idx = 0; idx < Y_resolution; idx++) 
-    {
-        Y[idx] = 16 + (65.481*RGB[idx * 3] + 128.5530*RGB[idx * 3 + 1] + 24.966*RGB[idx * 3 + 2]);
-    }
-    for (idx = 0; idx < U_resolution; idx++)
-    {
-        U[idx] = 128 + (-37.797*RGB[idx * 3] + 74.2030*RGB[idx * 3 + 1] + 112.000*RGB[idx * 3 + 2]);
-    }
-    for (idx = 0; idx < V_resolution; idx++)
-    {
-        V[idx] = 128 + (112.000*RGB[idx * 3] + 93.7860*RGB[idx * 3 + 1] + 18.214*RGB[idx * 3 + 2]);
-    }
+    //for (idx = 0; idx < Y_resolution; idx++) 
+    //{
+    //    Y[idx] = 16 + (65.481*RGB[idx * 3] + 128.5530*RGB[idx * 3 + 1] + 24.966*RGB[idx * 3 + 2]);
+    //}
+    //for (idx = 0; idx < U_resolution; idx++)
+    //{
+    //    U[idx] = 128 + (-37.797*RGB[idx * 3] + 74.2030*RGB[idx * 3 + 1] + 112.000*RGB[idx * 3 + 2]);
+    //}
+    //for (idx = 0; idx < V_resolution; idx++)
+    //{
+    //    V[idx] = 128 + (112.000*RGB[idx * 3] + 93.7860*RGB[idx * 3 + 1] + 18.214*RGB[idx * 3 + 2]);
+    //}
 
     // Y = 0.299 * R + 0.587 * G + 0.114 * B
     // Cb = -0.147 * R - 0.289 * G + 0.436 * B
     // Cr = 0.615 * R - 0.515 * G - 0.100 * B
     for (idx = 0; idx < Y_resolution; idx++) 
     {
-        Y[idx] = 0.299*RGB[idx * 3] + 0.587*RGB[idx * 3 + 1] + 0.114*RGB[idx * 3 + 2];
+        //return std::tuple<double, double, double>(0.299 * r + 0.587 * g + 0.114 * b - 128,
+        //    -0.1687 * r - 0.3313 * g + 0.5 * b, 0.5 * r - 0.4187 * g - 0.0813 * b);
+        Y[idx] = 0.299*RGB[idx * 3] + 0.587*RGB[idx * 3 + 1] + 0.114*RGB[idx * 3 + 2] - 128;
+        U[idx] = -0.1687*RGB[idx * 3] + -0.3313*RGB[idx * 3 + 1] + 0.5*RGB[idx * 3 + 2];
+        V[idx] = 0.5*RGB[idx * 3] + -0.4187*RGB[idx * 3 + 1] + -0.0813*RGB[idx * 3 + 2];
+
+        //Y[idx] = 0.299*RGB[idx * 3] + 0.587*RGB[idx * 3 + 1] + 0.114*RGB[idx * 3 + 2] - 128;
+        //U[idx] = -0.147*RGB[idx * 3] + -0.289*RGB[idx * 3 + 1] + 0.436*RGB[idx * 3 + 2];
+        //V[idx] = 0.615*RGB[idx * 3] + -0.515*RGB[idx * 3 + 1] + -0.100*RGB[idx * 3 + 2];
     }
-    for (idx = 0; idx < U_resolution; idx++)
-    {
-        U[idx] = -0.147*RGB[idx * 3] + -0.289*RGB[idx * 3 + 1] + 0.436*RGB[idx * 3 + 2];
-    }
-    for (idx = 0; idx < V_resolution; idx++)
-    {
-        V[idx] = 0.615*RGB[idx * 3] + -0.515*RGB[idx * 3 + 1] + -0.100*RGB[idx * 3 + 2];
-    }
+    //for (idx = 0; idx < U_resolution; idx++)
+    //{
+    //    U[idx] = -0.147*RGB[idx * 3] + -0.289*RGB[idx * 3 + 1] + 0.436*RGB[idx * 3 + 2];
+    //}
+    //for (idx = 0; idx < V_resolution; idx++)
+    //{
+    //    V[idx] = 0.615*RGB[idx * 3] + -0.515*RGB[idx * 3 + 1] + -0.100*RGB[idx * 3 + 2];
+    //}
 }
 
 Void encode_app_data(stream *bs)
@@ -212,32 +221,34 @@ Void component_down_sampling()
 
 }
 
-Void copy_block(pix *src, size_t pos_x, size_t pos_y, size_t pic_width, pix* target)
+Void copy_block(double *src, size_t pos_x, size_t pos_y, size_t pic_width, double* target)
 {
     int x, y;
     assert(!(pos_x % 8) && !(pos_y % 8));
     assert(pic_width > 0);
 
-    pix *tmp_src = src + pos_x + pos_y*pic_width;
+    double *tmp_src = src + pos_x + pos_y*pic_width;
     //uint32_t *tmp_target = (uint32_t *)target;
 
     for (y = 0; y < BLOCK_ROW; y++)
     {
-        memcpy(target+y*BLOCK_ROW, tmp_src + y*pic_width, BLOCK_COLUMN*sizeof(pix));
+        for (x = 0; x < BLOCK_COLUMN; x++)
+            target[x + y*BLOCK_COLUMN] = tmp_src[x + y*pic_width];
+        //memcpy(target+y*BLOCK_ROW, tmp_src + y*pic_width, BLOCK_COLUMN*sizeof(pix));
     }
 }
 
-Void transform_8x8(uint8_t *pixels, double *coefs)
+Void transform_8x8(double *pixels, double *coefs)
 {
     // before dct, MCU should level shifted.
     int i;
-    int8_t shifted_pixels[BLOCK_PIXELS];
+    double shifted_pixels[BLOCK_PIXELS];
     memset(shifted_pixels, 0, sizeof(shifted_pixels));
 
-    for (i = 0; i < BLOCK_PIXELS; i++)
-    {
-        shifted_pixels[i] = pixels[i] - 128;
-    }
+    //for (i = 0; i < BLOCK_PIXELS; i++)
+    //{
+    //    shifted_pixels[i] = pixels[i] - 128;
+    //}
 
     // level shift
     int x, y, u, v;
@@ -254,7 +265,7 @@ Void transform_8x8(uint8_t *pixels, double *coefs)
             {
                 for (x = 0; x < BLOCK_COLUMN; x++)
                 {
-                    sum_temp += shifted_pixels[x + y * BLOCK_COLUMN] * cos((2 * x + 1)*u*PI / 16) * cos((2 * y + 1)*v*PI / 16);
+                    sum_temp += pixels[x + y * BLOCK_COLUMN] * cos((2 * x + 1)*u*PI / 16.0) * cos((2 * y + 1)*v*PI / 16.0);
                 }
             }
             au = u == 0 ? _1_div_sqrt_2 : 1;
@@ -361,11 +372,19 @@ Void encode_block(double *coefs, int16_t prev_dc, bit_value *dc_huffman_table, b
     // encode DC
     int16_t dc_diff = (int16_t)coefs[0] - prev_dc;
     bit_value coef_result, huffman_code;
-    value_to_code(dc_diff, &coef_result, DC_COEF);
-    // after get bits of code, check huffman table for huffman code.
-    memcpy(&huffman_code, dc_huffman_table + coef_result.length, sizeof(bit_value));
-    U(huffman_code.length, huffman_code.code);
-    U(coef_result.length, coef_result.code);
+    if (dc_diff == 0)
+    {
+        memcpy(&huffman_code, dc_huffman_table, sizeof(bit_value));
+        U(huffman_code.length, huffman_code.code);
+    }
+    else
+    {
+        value_to_code(dc_diff, &coef_result, DC_COEF);
+        // after get bits of code, check huffman table for huffman code.
+        memcpy(&huffman_code, dc_huffman_table + coef_result.length, sizeof(bit_value));
+        U(huffman_code.length, huffman_code.code);
+        U(coef_result.length, coef_result.code);
+    }
 
     // scan AC coefs;
     size_t tmp_scan = -1;
@@ -389,6 +408,7 @@ Void encode_block(double *coefs, int16_t prev_dc, bit_value *dc_huffman_table, b
                     // encode EOB
                     memcpy(&huffman_code, ac_huffman_table, sizeof(bit_value));
                     U(huffman_code.length, huffman_code.code); // code EOB only.
+                    return;
                 }
                 else
                 {
@@ -414,6 +434,9 @@ Void encode_block(double *coefs, int16_t prev_dc, bit_value *dc_huffman_table, b
 
         }
     }
+    // write EOB after scan.
+    memcpy(&huffman_code, ac_huffman_table, sizeof(bit_value));
+    U(huffman_code.length, huffman_code.code); // code EOB only.
 }
 
 Void encode_restart(stream *bs, frame_header* header)
@@ -430,7 +453,23 @@ Void encode_scan_header(stream *bs, frame_header* header)
     // SOS
     U16(0xFFDA);
 
-    U16(0x000C);  // Ls: 16 bits. Ls = 8 + 2*Ns
+    U16(0x000C);  // Ls: 16 bits. Ls = 6 + 2*Ns
+
+    U8(0X03); // Ns, 3 component.
+
+    {
+        U8(0x01);
+        U8(0x00);
+
+        U8(0x02);
+        U8(0x11);
+
+        U8(0x03);
+        U8(0x11);
+    }
+    U8(0x00); // Ss
+    U8(0x3f); // Se
+    U8(0x00); // Ah|Al
 }
 
 Void encode_quantization_table(stream *bs, frame_header* header)
@@ -458,6 +497,10 @@ Void encode_quantization_table(stream *bs, frame_header* header)
     }
 }
 
+Void encode_end_code(stream *bs)
+{
+    U16(0xFFD9);
+}
 
 Void encode_frame_header(stream *bs, frame_header* header)
 {
@@ -486,7 +529,7 @@ Void encode_frame_header(stream *bs, frame_header* header)
     // for(component_id=0;i<component;i++)
     {
         // 3 component are all same dimension (easy to implement, don't need to worry about scan order).
-        U8(01);   // C1
+        U8(0x01);   // C1
         U8(0x11); // H1|V1
         U8(0x00); // Tq1: specify quantization table for component.
 
@@ -502,7 +545,7 @@ Void encode_frame_header(stream *bs, frame_header* header)
 
 Void write_bit_stream(FILE* fp, stream *bs)
 {
-    fwrite(bs, sizeof(bs_t), bs->buf - bs->origin, fp);
+    fwrite(bs->origin, sizeof(bs_t), bs->buf - bs->origin, fp);
     bs->buf = bs->origin;
 }
 

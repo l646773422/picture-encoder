@@ -1,4 +1,5 @@
-
+#ifndef ENCODER_H
+#define ENCODER_H
 // we only implement baseline process
 
 // which support
@@ -13,13 +14,6 @@
 #include "common.h"
 #include <stdlib.h>
 #include <stdio.h>
-
-#if __BYTE_ORDER == __BIG_ENDIAN
-//#   define SWAP32(x) (uint32_t)(x)
-#define SWAP32(x) (uint32_t)((((x) >> 24) & 0xFF) | (((x) >> 8) & 0xFF00) | (((x) << 8) & 0xFF0000) | ((x & 0xFF) << 24))
-#else
-#define SWAP32(x) (uint32_t)((((x) >> 24) & 0xFF) | (((x) >> 8) & 0xFF00) | (((x) << 8) & 0xFF0000) | ((x & 0xFF) << 24))
-#endif
 
 #define BS_OPEN(bs) uint32_t cache = bs->cache; int shift = bs->shift; uint32_t *buf = bs->buf;
 #define BS_CLOSE(bs) bs->cache = cache; bs->shift = shift; bs->buf = buf;
@@ -148,14 +142,15 @@ Void encode_restart(stream *bs, frame_header* header);
 
 Void encode_comment(stream *bs, frame_header* header);
 
-Void color_space_transform(pix *RGB, pix *YUV, size_t Y_width, size_t Y_height, sampling_fomat format);
+Void color_space_transform(pix *RGB, double *YUV, size_t Y_width, size_t Y_height, sampling_fomat format);
 
 Void encode_app_data(stream *bs);
+Void encode_end_code(stream *bs);
 
 Void quantization_8x8(frame_header *header, double *coefs, uint8_t *quant_table);
 Void component_down_sampling();
-Void copy_block(pix *src, size_t pos_x, size_t pos_y, size_t pic_width, pix* target);
-Void transform_8x8(uint8_t *pixels, double *coefs);
+Void copy_block(double *src, size_t pos_x, size_t pos_y, size_t pic_width, double* target);
+Void transform_8x8(double *pixels, double *coefs);
 Void encode_block(double *coefs, int16_t prev_dc, bit_value *dc_huffman_table, bit_value *ac_huffman_table, stream *bs);
 int value_to_code(int32_t value, bit_value *target, coef_type coef);
 
@@ -168,3 +163,5 @@ Void init_zigzag_table(uint8_t *table);
 Void init_frame_header(frame_header *header);
 
 Void entropy_encoding();
+
+#endif
