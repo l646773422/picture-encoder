@@ -265,7 +265,7 @@ Void transform_8x8(double *pixels, double *coefs)
             {
                 for (x = 0; x < BLOCK_COLUMN; x++)
                 {
-                    sum_temp += pixels[x + y * BLOCK_COLUMN] * cos((2 * x + 1)*u*PI / 16.0) * cos((2 * y + 1)*v*PI / 16.0);
+                    sum_temp += pixels[x + y * BLOCK_COLUMN] * transform_talbe[u][x] * transform_talbe[v][y];
                 }
             }
             au = u == 0 ? _1_div_sqrt_2 : 1;
@@ -273,6 +273,7 @@ Void transform_8x8(double *pixels, double *coefs)
             coefs[u + v * BLOCK_COLUMN] = 0.25 * au * av * sum_temp;
         }
     }
+
 }
 
 Void quantization_8x8(frame_header *header, double *coefs, uint8_t *quant_table)
@@ -299,7 +300,7 @@ Void init_zigzag_table(uint8_t *table)
     //    35, 36, 48, 49, 57, 58, 62, 63
     //};
 
-    size_t x, y;
+    size_t x = 0, y = 0;
     size_t scan_counter = 1; // Scan start from AC.
     uint8_t up = 1, down = 0;
     while (scan_counter < (BLOCK_PIXELS - 1) && !(x == BLOCK_COLUMN - 1 && y == BLOCK_ROW - 1))
@@ -568,6 +569,81 @@ Void init_quantization_table(quantization_table *table, uint8_t *coefs)
     {
         table->coefs[idx] = coefs[idx];
     }
+}
+
+static Void insert()
+{
+
+}
+
+// Input: coef after quant.
+Void analyse_coef(double *coefs, size_t matrix_width, size_t matrix_height, int *statistical_results, coef_type type)
+{
+    size_t x, y;
+    int index;
+    bit_value target;
+    
+    for (y = 0; y < BLOCK_ROW; ++y)
+    {
+        for (x = 0; x < BLOCK_COLUMN; ++x)
+        {
+            value_to_code(coefs[x + y*BLOCK_COLUMN], &target, type);
+            statistical_results[target.length] += 1;
+        }
+    }
+}
+
+static int frequence_compare(val_frequency *t1, val_frequency *t2, size_t _elem_size)
+{
+    return t1->value - t2->value;
+}
+
+// the key to build a huffman table, is to get the frequency of bits (which record coef will cost)
+Void create_huffman_table_from_coef(double *coefs, size_t matrix_width, size_t matrix_height, bit_value *target_table, coef_type type)
+{
+    size_t idx, total_size;
+    int *statistical_results;
+    huffman_node *combine;
+
+    combine = (huffman_node *)malloc(sizeof(huffman_node) * BITS_SIZE);
+    memset(combine, 0, sizeof(sizeof(huffman_node) * BITS_SIZE));
+    for (idx = 0; idx < BITS_SIZE; ++idx)
+    {
+        combine[idx].arr = (int32_t*)malloc(sizeof(int32_t) * BITS_SIZE);
+        combine[idx].cur = 0;
+        combine[idx].length = BITS_SIZE;
+        combine[idx].weight = 0;
+    }
+
+    statistical_results = (int*)malloc(sizeof(int) * BITS_SIZE);
+    memset(statistical_results, 0, sizeof(int) * BITS_SIZE);
+
+    analyse_coef(coefs, matrix_width, matrix_height, statistical_results, type);
+
+    for (idx = 0; idx < BITS_SIZE; ++idx)
+    {
+        combine[idx].weight += statistical_results[idx];
+        combine[idx].arr[combine[idx].cur] = idx;
+        combine[idx].cur += 1;
+    }
+
+    int min1, min2;
+    for (idx = 0; idx < BITS_SIZE; ++idx)
+    {
+        
+    }
+
+    //dynamic_array arr;
+    //init_dynamic_array(&arr, sizeof(val_frequency), 64);
+    //val_frequency t = { 0, 0 };
+    //for (idx = 0, total_size = matrix_height * matrix_width; idx < total_size; ++idx)
+    //{
+    //    t.key = idx; t.value = statistical_results[idx];
+    //    arr_insert(&arr, &t, frequence_compare);
+    //}
+    //destory_dynamic_array(&arr);
+
+    free(statistical_results);
 }
 
 Void calc_huffman_table(bit_value *table, uint32_t *BITS, uint32_t *HUFFVAL)

@@ -33,6 +33,17 @@ static const uint8_t zigzag[64] =
     60, 61, 54, 47, 55, 62, 63
 };
 
+static const double transform_talbe[8][8] = { 
+    1.00000000, 1.00000000, 1.00000000, 1.00000000, 1.00000000, 1.00000000, 1.00000000, 1.00000000,
+    0.98078528, 0.83146961, 0.55557023, 0.19509032, -0.19509032, -0.55557023, -0.83146961, -0.98078528,
+    0.92387953, 0.38268343, -0.38268343, -0.92387953, -0.92387953, -0.38268343, 0.38268343, 0.92387953,
+    0.83146961, -0.19509032, -0.98078528, -0.55557023, 0.55557023, 0.98078528, 0.19509032, -0.83146961,
+    0.70710678, -0.70710678, -0.70710678, 0.70710678, 0.70710678, -0.70710678, -0.70710678, 0.70710678,
+    0.55557023, -0.98078528, 0.19509032, 0.83146961, -0.83146961, -0.19509032, 0.98078528, -0.55557023,
+    0.38268343, -0.92387953, 0.92387953, -0.38268343, -0.38268343, 0.92387953, -0.92387953, 0.38268343,
+    0.19509032, -0.55557023, 0.83146961, -0.98078528, 0.98078528, -0.83146961, 0.55557023, -0.19509032,
+};
+
 typedef void Void;
 typedef uint8_t pix;
 typedef uint8_t byte;
@@ -146,5 +157,104 @@ static Void flush_stream(stream* bs)
     bs->cache = 0;
     bs->shift = 32;
 }
+
+typedef struct dynamic_array
+{
+    Void *buf;
+    size_t cur;
+    size_t element_size;
+    size_t length; // 
+}dynamic_array;
+
+// not really huffman tree, but a structure represent the node combine process.
+typedef struct huffman_node
+{
+    int32_t weight;
+    int32_t *arr;
+    size_t length, cur;
+}huffman_node;
+
+typedef struct sized_array
+{
+    size_t length;
+    size_t cur;
+    int32_t *data;
+}sized_array;
+
+typedef struct key_value
+{
+    int32_t key;
+    int32_t value;
+}key_value;
+
+typedef key_value val_frequency;
+
+static Void init_dynamic_array(dynamic_array *arr, size_t element_size, size_t length)
+{
+    arr->cur = 0;
+    arr->element_size = element_size;
+    arr->length = length;
+    arr->buf = malloc(element_size * length);
+    memset(arr->buf, 0, element_size * length);
+}
+
+static Void destory_dynamic_array(dynamic_array *arr)
+{
+    free(arr->buf);
+    arr->buf = NULL;
+}
+
+static Void arr_expand(dynamic_array *arr)
+{
+    assert(arr);
+    Void *buf = malloc(arr->length * arr->element_size * 2);
+    if (buf == NULL) return;
+    memcpy(buf, arr->buf, arr->cur * arr->element_size);
+    arr->length *= 2;
+    free(arr->buf);
+    arr->buf = buf;
+}
+
+static Void arr_append(dynamic_array *arr, Void *element)
+{
+    assert(arr);
+    assert(element);
+    uint8_t *ptr = arr->buf;
+    if (arr->cur >= 0.8*arr->length)
+    {
+        arr_expand(arr);
+    }
+    if (arr->cur == arr->length) return;
+    memcpy(ptr + arr->cur++ * arr->element_size, element, arr->element_size);
+}
+
+static Void arr_insert(dynamic_array *arr, Void *element, int (*func)(Void *, Void*, size_t _elem_size) )
+{
+    assert(arr);
+    assert(element);
+    uint8_t *ptr = arr->buf;
+    size_t target_pos = 0;
+    if (arr->cur >= 0.8*arr->length)
+    {
+        arr_expand(arr);
+    }
+    if (arr->cur == arr->length) return; // if expand failed, and array if full.
+
+    if (func == NULL) func = memcmp;
+
+
+    // Use memcmp for temporary needs.  TODO: pass compare function to compare.
+    while (target_pos <= arr->cur)
+    {
+        if (func(ptr + target_pos*arr->element_size, element, arr->element_size) < 0)
+        {
+            // 
+            memmove(ptr + (target_pos + 1)*arr->element_size, ptr + target_pos*arr->element_size, (arr->cur - target_pos)*arr->element_size);
+            memcpy(ptr + target_pos*arr->element_size, element, arr->element_size);
+        }
+    }
+
+}
+
 
 #endif

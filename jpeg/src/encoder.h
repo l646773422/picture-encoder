@@ -137,23 +137,23 @@ Void encode_huffman_table(stream *bs, frame_header* header);
 
 // TODO, need a enc parameter.
 Void encode_scan_header(stream *bs, frame_header* header);
-
 Void encode_restart(stream *bs, frame_header* header);
-
 Void encode_comment(stream *bs, frame_header* header);
+Void encode_app_data(stream *bs);
+Void encode_end_code(stream *bs);
+Void encode_block(double *coefs, int16_t prev_dc, bit_value *dc_huffman_table, bit_value *ac_huffman_table, stream *bs);
 
 Void color_space_transform(pix *RGB, double *YUV, size_t Y_width, size_t Y_height, sampling_fomat format);
 
-Void encode_app_data(stream *bs);
-Void encode_end_code(stream *bs);
 
 Void quantization_8x8(frame_header *header, double *coefs, uint8_t *quant_table);
 Void component_down_sampling();
 Void copy_block(double *src, size_t pos_x, size_t pos_y, size_t pic_width, double* target);
 Void transform_8x8(double *pixels, double *coefs);
-Void encode_block(double *coefs, int16_t prev_dc, bit_value *dc_huffman_table, bit_value *ac_huffman_table, stream *bs);
 int value_to_code(int32_t value, bit_value *target, coef_type coef);
 
+Void analyse_coef(double *coefs, size_t matrix_width, size_t matrix_height, int *statistical_results, coef_type type);
+Void create_huffman_table_from_coef(double *coefs, size_t matrix_width, size_t matrix_height, bit_value *target_table, coef_type type);
 Void calc_huffman_table(bit_value *table, uint32_t *BITS, uint32_t *HUFFVAL);
 
 Void write_bit_stream(FILE* fp, stream *bs);

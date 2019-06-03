@@ -72,6 +72,9 @@ Void test_transform_8x8()
         -1.030674,	    0.183067,	0.416815,	-2.415561,	-0.877794,	-3.019307,	4.120612,	-0.661948,
         -0.165376,	    0.141607,	-1.071536,	-4.192912,	-1.170314,	-0.097761,	0.501269,	1.675459,
     };
+    // level shift
+    int i;
+    for (i = 0; i < BLOCK_PIXELS; i++) pixels[i] -= 128;
     transform_8x8(pixels, coefs);
 
     TEST_TRANSFORM_8X8(coefs, target_coefs);
@@ -236,8 +239,26 @@ Void test_encode_block()
     encode_block(NULL, 0, NULL, NULL, NULL);
 }
 
+Void test_create_huffman_table_from_coefs()
+{
+    double target_coefs[BLOCK_PIXELS] = {
+        -415.375000,	-30.185717,	-61.197062,	27.239322,	56.125000,	-20.095174,	-2.387647,	0.461815,
+        4.465524,	    -21.857439,	-60.758038,	10.253637,	13.145110,	-7.087418,	-8.535437,	4.876888,
+        -46.834485,	    7.370597,	77.129388,	-24.561982,	-28.911688,	9.933521,	5.416815,	-5.648951,
+        -48.534967,	    12.068361,	34.099767,	-14.759411,	-10.240607,	6.295967,	1.831165,	1.945937,
+        12.125000,	    -6.553450,	-13.196121,	-3.951428,	-1.875000,	1.745284,	-2.787228,	3.135282,
+        -7.734744,	    2.905461,	2.379796,	-5.939314,	-2.377797,	0.941392,	4.303713,	1.848691,
+        -1.030674,	    0.183067,	0.416815,	-2.415561,	-0.877794,	-3.019307,	4.120612,	-0.661948,
+        -0.165376,	    0.141607,	-1.071536,	-4.192912,	-1.170314,	-0.097761,	0.501269,	1.675459,
+    };
+    bit_value huffman_table[256];
+    quantization_8x8(NULL, target_coefs, Standard_Chroma_Quantization_Table);
+    create_huffman_table_from_coef(target_coefs, 8, 8, huffman_table, AC_COEF);
+}
+
 Void test()
 {
+    test_create_huffman_table_from_coefs();
     test_encode_block();
     test_copy_block();
     test_color_space_transform();
