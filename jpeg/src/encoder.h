@@ -31,7 +31,7 @@ cache |= (uint32_t)val << shift;
 //  Standard_DC_Luminance_Codes 这个数组记录使用 16 个比特表达的节点有 R 个
 // {0, 0, 7 ..} 的意思是总共有长度为3的value有7个，其中value从Standard_DC_Luminance_Values数组中读取。
 // 因此有 sum of Standard_DC_Luminance_Codes[i] = length of (Standard_DC_Luminance_Values)
-
+                                                //1  2  3  4 
 static uint32_t Standard_DC_Luminance_Codes[] = { 0, 1, 5, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0 };
 static uint32_t Standard_DC_Luminance_Values[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };
 
@@ -149,11 +149,13 @@ Void color_space_transform(pix *RGB, double *YUV, size_t Y_width, size_t Y_heigh
 Void quantization_8x8(frame_header *header, double *coefs, uint8_t *quant_table);
 Void component_down_sampling();
 Void copy_block(double *src, size_t pos_x, size_t pos_y, size_t pic_width, double* target);
+Void copy_block_back(double *src, size_t pos_x, size_t pos_y, size_t pic_width, double* target);
 Void transform_8x8(double *pixels, double *coefs);
 int value_to_code(int32_t value, bit_value *target, coef_type coef);
 
-Void analyse_coef(double *coefs, size_t matrix_width, size_t matrix_height, int *statistical_results, coef_type type);
-Void create_huffman_table_from_coef(double *coefs, size_t matrix_width, size_t matrix_height, bit_value *target_table, coef_type type);
+Void analyse_block_8x8(double *coefs, int16_t prev_dc, int *DC_statistical_results, int *AC_statistical_results);
+Void analyse_coef(double *coefs, size_t matrix_width, size_t matrix_height, int *DC_statistical_results, int *AC_statistical_results);
+Void create_huffman_table_from_coef(frame_header *header, double *coefs, size_t matrix_width, size_t matrix_height, bit_value *DC_target_table, bit_value *AC_target_table);
 Void calc_huffman_table(bit_value *table, uint32_t *BITS, uint32_t *HUFFVAL);
 
 Void write_bit_stream(FILE* fp, stream *bs);

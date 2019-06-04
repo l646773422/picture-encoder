@@ -239,26 +239,86 @@ Void test_encode_block()
     encode_block(NULL, 0, NULL, NULL, NULL);
 }
 
-Void test_create_huffman_table_from_coefs()
+Void test_encode_with_optimal_huffman_table()
 {
-    double target_coefs[BLOCK_PIXELS] = {
-        -415.375000,	-30.185717,	-61.197062,	27.239322,	56.125000,	-20.095174,	-2.387647,	0.461815,
-        4.465524,	    -21.857439,	-60.758038,	10.253637,	13.145110,	-7.087418,	-8.535437,	4.876888,
-        -46.834485,	    7.370597,	77.129388,	-24.561982,	-28.911688,	9.933521,	5.416815,	-5.648951,
-        -48.534967,	    12.068361,	34.099767,	-14.759411,	-10.240607,	6.295967,	1.831165,	1.945937,
-        12.125000,	    -6.553450,	-13.196121,	-3.951428,	-1.875000,	1.745284,	-2.787228,	3.135282,
-        -7.734744,	    2.905461,	2.379796,	-5.939314,	-2.377797,	0.941392,	4.303713,	1.848691,
-        -1.030674,	    0.183067,	0.416815,	-2.415561,	-0.877794,	-3.019307,	4.120612,	-0.661948,
-        -0.165376,	    0.141607,	-1.071536,	-4.192912,	-1.170314,	-0.097761,	0.501269,	1.675459,
-    };
-    bit_value huffman_table[256];
-    quantization_8x8(NULL, target_coefs, Standard_Chroma_Quantization_Table);
-    create_huffman_table_from_coef(target_coefs, 8, 8, huffman_table, AC_COEF);
+    frame_header header;
+    stream bs;
+
+    init_frame_header(&header);
+    init_bit_stream(&bs);
+    FILE* fp = fopen("opt_huffman.jpg", "wb");
+    double coefs_8x8[BLOCK_PIXELS];
+    double pixels_8x8[BLOCK_PIXELS];
+    size_t pic_width, pic_height;
+    size_t idx;
+
+    for (idx = 0; idx < QUANTIZATION_TABLE_SIZE; idx++)
+    {
+        header.luma_quantization_table.coefs[idx] = 2;
+        header.chroma_quantization_table.coefs[idx] = 2;
+    }
+
+    pic_width = pic_height = 256;
+
+    header.frame_height = pic_height;
+    header.frame_width = pic_width;
+
+    uint8_t *src_pixels, *tmp_pixels;
+    double *yuv_pixels, *y, *u, *v, *coefs;
+    src_pixels = (uint8_t *)malloc(sizeof(uint8_t) * pic_width * pic_height * 3);
+    yuv_pixels = (double *)malloc(sizeof(double) * pic_width * pic_height * 3);
+    coefs = (double *)malloc(sizeof(double) * pic_width * pic_height * 3);
+
+
+    tmp_pixels = src_pixels;
+    for (int i = 0; i < 256; ++i)
+        for (int j = 0; j < 256; ++j)
+        {
+            *tmp_pixels++ = j, *tmp_pixels++ = i, *tmp_pixels++ = 128;
+        }
+    color_space_transform(src_pixels, yuv_pixels, pic_width, pic_height, FORMAT_444);
+    y = yuv_pixels; u = yuv_pixels + pic_width * pic_height; v = yuv_pixels + pic_width * pic_height * 2;
+
+    size_t pos_x, pos_y;
+
+    int16_t y_prev, u_prev, v_prev;
+    y_prev = u_prev = v_prev = 0;
+    for (pos_y = 0; pos_y < pic_height; pos_y += 8)
+    {
+        for (pos_x = 0; pos_x < pic_width; pos_x += 8)
+        {
+            copy_block(y, pos_x, pos_y, pic_width, pixels_8x8);
+            transform_8x8(pixels_8x8, coefs_8x8);
+            quantization_8x8(&header, coefs_8x8, header.luma_quantization_table.coefs);
+            copy_block_back(coefs, pos_x, pos_y, pic_width, coefs_8x8);
+        }
+    }
+    bit_value dc_table[256], ac_table[256];
+    create_huffman_table_from_coef(&header, coefs, pic_width, pic_height, dc_table, ac_table);
+
+    encode_frame_header(&bs, &header);
+    encode_huffman_table(&bs, &header);
+    encode_quantization_table(&bs, &header);
+
+    write_bit_stream(fp, &bs);
+
+    encode_scan_header(&bs, &header);
+
+
+    flush_stream(&bs);
+    encode_end_code(&bs);
+    free(coefs);
+    free(yuv_pixels);
+    free(src_pixels);
+    flush_stream(&bs);
+    write_bit_stream(fp, &bs);
+    fclose(fp);
+    destory_bit_stream(&bs);
 }
 
 Void test()
 {
-    test_create_huffman_table_from_coefs();
+    test_encode_with_optimal_huffman_table();
     test_encode_block();
     test_copy_block();
     test_color_space_transform();

@@ -6,6 +6,7 @@
 #include <memory.h>
 
 #define BITS_SIZE 16
+#define MAX_SYMBOL 256
 #define QUANTIZATION_TABLE_SIZE  64 // 8*8 block
 #define BLOCK_COLUMN 8
 #define BLOCK_ROW 8
@@ -58,11 +59,15 @@ typedef struct stream
     bs_t     *origin; // initial position
 }stream;
 
-typedef enum coef_type{
-    DC_COEF=0, AC_COEF, DEFAULT
+typedef enum channel_tag {
+    Luma = 0, Chroma, Channel_DEFAULT
+}channel_type;
+
+typedef enum coef_type_tag {
+    DC_COEF=0, AC_COEF, COEF_DEFAULT
 }coef_type;
 
-typedef enum sampling_fomat {
+typedef enum sampling_fomat_tag {
     FORMAT_444, FORMAT_420, FORMAT_422, UNKNOWN
 }sampling_fomat;
 

@@ -169,46 +169,15 @@ Void color_space_transform(pix *RGB, double *YUV, size_t Y_width, size_t Y_heigh
     R = RGB; G = RGB + Y_resolution; B = G + Y_resolution;  // RGB 3 channel have same resolution.
     Y = YUV; U = YUV + Y_resolution; V = U + U_resolution;
 
-    //  Y'= 16  + (  65.481*R' + 128.5530*G' +  24.966*B')
-    // Cb = 128 + ( -37.797*R' +  74.2030*G' + 112.000*B')
-    // Cr = 128 + ( 112.000*R' +  93.7860*G' +  18.214*B')
-
-    //for (idx = 0; idx < Y_resolution; idx++) 
-    //{
-    //    Y[idx] = 16 + (65.481*RGB[idx * 3] + 128.5530*RGB[idx * 3 + 1] + 24.966*RGB[idx * 3 + 2]);
-    //}
-    //for (idx = 0; idx < U_resolution; idx++)
-    //{
-    //    U[idx] = 128 + (-37.797*RGB[idx * 3] + 74.2030*RGB[idx * 3 + 1] + 112.000*RGB[idx * 3 + 2]);
-    //}
-    //for (idx = 0; idx < V_resolution; idx++)
-    //{
-    //    V[idx] = 128 + (112.000*RGB[idx * 3] + 93.7860*RGB[idx * 3 + 1] + 18.214*RGB[idx * 3 + 2]);
-    //}
-
     // Y = 0.299 * R + 0.587 * G + 0.114 * B
     // Cb = -0.147 * R - 0.289 * G + 0.436 * B
     // Cr = 0.615 * R - 0.515 * G - 0.100 * B
     for (idx = 0; idx < Y_resolution; idx++) 
     {
-        //return std::tuple<double, double, double>(0.299 * r + 0.587 * g + 0.114 * b - 128,
-        //    -0.1687 * r - 0.3313 * g + 0.5 * b, 0.5 * r - 0.4187 * g - 0.0813 * b);
         Y[idx] = 0.299*RGB[idx * 3] + 0.587*RGB[idx * 3 + 1] + 0.114*RGB[idx * 3 + 2] - 128;
         U[idx] = -0.1687*RGB[idx * 3] + -0.3313*RGB[idx * 3 + 1] + 0.5*RGB[idx * 3 + 2];
         V[idx] = 0.5*RGB[idx * 3] + -0.4187*RGB[idx * 3 + 1] + -0.0813*RGB[idx * 3 + 2];
-
-        //Y[idx] = 0.299*RGB[idx * 3] + 0.587*RGB[idx * 3 + 1] + 0.114*RGB[idx * 3 + 2] - 128;
-        //U[idx] = -0.147*RGB[idx * 3] + -0.289*RGB[idx * 3 + 1] + 0.436*RGB[idx * 3 + 2];
-        //V[idx] = 0.615*RGB[idx * 3] + -0.515*RGB[idx * 3 + 1] + -0.100*RGB[idx * 3 + 2];
     }
-    //for (idx = 0; idx < U_resolution; idx++)
-    //{
-    //    U[idx] = -0.147*RGB[idx * 3] + -0.289*RGB[idx * 3 + 1] + 0.436*RGB[idx * 3 + 2];
-    //}
-    //for (idx = 0; idx < V_resolution; idx++)
-    //{
-    //    V[idx] = 0.615*RGB[idx * 3] + -0.515*RGB[idx * 3 + 1] + -0.100*RGB[idx * 3 + 2];
-    //}
 }
 
 Void encode_app_data(stream *bs)
@@ -228,13 +197,27 @@ Void copy_block(double *src, size_t pos_x, size_t pos_y, size_t pic_width, doubl
     assert(pic_width > 0);
 
     double *tmp_src = src + pos_x + pos_y*pic_width;
-    //uint32_t *tmp_target = (uint32_t *)target;
 
     for (y = 0; y < BLOCK_ROW; y++)
     {
         for (x = 0; x < BLOCK_COLUMN; x++)
             target[x + y*BLOCK_COLUMN] = tmp_src[x + y*pic_width];
         //memcpy(target+y*BLOCK_ROW, tmp_src + y*pic_width, BLOCK_COLUMN*sizeof(pix));
+    }
+}
+
+Void copy_block_back(double *src, size_t pos_x, size_t pos_y, size_t pic_width, double* target)
+{
+    int x, y;
+    assert(!(pos_x % 8) && !(pos_y % 8));
+    assert(pic_width > 0);
+
+    double *tmp_src = src + pos_x + pos_y*pic_width;
+
+    for (y = 0; y < BLOCK_ROW; y++)
+    {
+        for (x = 0; x < BLOCK_COLUMN; x++)
+            tmp_src[x + y*pic_width] = target[x + y*BLOCK_COLUMN];
     }
 }
 
@@ -576,19 +559,89 @@ static Void insert()
 
 }
 
+Void analyse_block_8x8(double *coefs, int16_t prev_dc, int *DC_statistical_results, int *AC_statistical_results)
+{
+    size_t zero_counter = 0, idx = 0;
+    size_t scan_counter = 1;
+    int16_t dc_diff = (int16_t)coefs[0] - prev_dc;
+    bit_value coef_result, huffman_code;
+
+    size_t tmp_scan = -1;
+    int16_t coef;
+    
+    if (dc_diff == 0)
+    {
+        DC_statistical_results[0] += 1;
+    }
+    else
+    {
+        value_to_code(dc_diff, &coef_result, DC_COEF);
+        DC_statistical_results[coef_result.length] += 1;
+    }
+
+    for (scan_counter = 1; scan_counter < BLOCK_PIXELS; scan_counter++)
+    {
+        //printf("%d ", zigzag[x_sequence[scan_counter] + y_sequence[scan_counter] * BLOCK_COLUMN]);
+        idx = zigzag[scan_counter];
+        coef = (int16_t)coefs[idx];
+        if (coef == 0)
+        {
+            zero_counter += 1;
+            if (zero_counter == 16)  // successive 16 zero will be encoded as ZRL (15, 0)
+            {
+                // check wether zero remain behind. If all zero, encode EOB (end of block)
+                // TODO: find the last non-zero element at scan start! And check (tmp_scan == last_non_zero) will know encode EOB or ZRL.
+                for (tmp_scan = scan_counter; tmp_scan < BLOCK_PIXELS; tmp_scan++)
+                    if (coefs[zigzag[tmp_scan]] != 0) break;
+                if (tmp_scan == BLOCK_PIXELS)
+                {
+                    // encode EOB
+                    AC_statistical_results[0x00] += 1;
+                    return;
+                }
+                else
+                {
+                    AC_statistical_results[0xF0] += 1;
+                }
+                scan_counter = tmp_scan;
+                zero_counter = 0;
+            }
+        }
+        else
+        {
+            // 
+            value_to_code(coef, &coef_result, AC_COEF);
+            uint8_t symbol = 0;
+            symbol |= zero_counter << 4;
+            symbol |= coef_result.length & 0x0F;
+            zero_counter = 0;
+            // after get bits of code, check huffman table for huffman code.
+            AC_statistical_results[symbol] += 1;
+
+        }
+    }
+}
+
 // Input: coef after quant.
-Void analyse_coef(double *coefs, size_t matrix_width, size_t matrix_height, int *statistical_results, coef_type type)
+Void analyse_coef(double *coefs, size_t matrix_width, size_t matrix_height, int *DC_statistical_results, int *AC_statistical_results)
 {
     size_t x, y;
     int index;
     bit_value target;
-    
-    for (y = 0; y < BLOCK_ROW; ++y)
+    size_t resolution = matrix_width * matrix_height;
+    // get DC and AC statistc result.
+    assert(resolution % 64 == 0);
+    double coefs_8x8[BLOCK_COLUMN*BLOCK_ROW];
+
+    size_t pos_x, pos_y;
+    int16_t prev_dc=0;
+    for (pos_y = 0; pos_y < matrix_height; pos_y += 8)
     {
-        for (x = 0; x < BLOCK_COLUMN; ++x)
+        for (pos_x = 0; pos_x < matrix_width; pos_x += 8)
         {
-            value_to_code(coefs[x + y*BLOCK_COLUMN], &target, type);
-            statistical_results[target.length] += 1;
+            copy_block(coefs, pos_x, pos_y, matrix_width, coefs_8x8);
+            analyse_block_8x8(coefs_8x8, prev_dc, DC_statistical_results, AC_statistical_results);
+            prev_dc = (int16_t)coefs_8x8[0];
         }
     }
 }
@@ -599,51 +652,104 @@ static int frequence_compare(val_frequency *t1, val_frequency *t2, size_t _elem_
 }
 
 // the key to build a huffman table, is to get the frequency of bits (which record coef will cost)
-Void create_huffman_table_from_coef(double *coefs, size_t matrix_width, size_t matrix_height, bit_value *target_table, coef_type type)
+Void create_huffman_table_from_coef(frame_header *header, double *coefs, size_t matrix_width, size_t matrix_height, bit_value *DC_target_table, bit_value *AC_target_table)
 {
     size_t idx, total_size;
-    int *statistical_results;
-    huffman_node *combine;
+    int *DCstatistical_results, *ACstatistical_results;
 
-    combine = (huffman_node *)malloc(sizeof(huffman_node) * BITS_SIZE);
-    memset(combine, 0, sizeof(sizeof(huffman_node) * BITS_SIZE));
-    for (idx = 0; idx < BITS_SIZE; ++idx)
+    DCstatistical_results = (int*)malloc(sizeof(int) * (1 << 8));
+    memset(DCstatistical_results, 0, sizeof(int) * (1 << 8));
+    ACstatistical_results = (int*)malloc(sizeof(int) * (1 << 8));
+    memset(ACstatistical_results, 0, sizeof(int) * (1 << 8));
+
+    analyse_coef(coefs, matrix_width, matrix_height, DCstatistical_results, ACstatistical_results);
+    
+
+    huffman_node *combine;
+    size_t bit_array[MAX_SYMBOL];
+    memset(bit_array, 0, sizeof(size_t)*MAX_SYMBOL);
+    combine = (huffman_node *)malloc(sizeof(huffman_node) * MAX_SYMBOL);
+    memset(combine, 0, sizeof(sizeof(huffman_node) * MAX_SYMBOL));
+    
+    for (idx = 0; idx < MAX_SYMBOL; ++idx)
     {
-        combine[idx].arr = (int32_t*)malloc(sizeof(int32_t) * BITS_SIZE);
+        combine[idx].arr = (int32_t*)malloc(sizeof(int32_t) * MAX_SYMBOL);
         combine[idx].cur = 0;
-        combine[idx].length = BITS_SIZE;
+        combine[idx].length = MAX_SYMBOL;
         combine[idx].weight = 0;
     }
 
-    statistical_results = (int*)malloc(sizeof(int) * BITS_SIZE);
-    memset(statistical_results, 0, sizeof(int) * BITS_SIZE);
-
-    analyse_coef(coefs, matrix_width, matrix_height, statistical_results, type);
-
-    for (idx = 0; idx < BITS_SIZE; ++idx)
+    for (idx = 0, total_size = 0; idx < MAX_SYMBOL; ++idx)
     {
-        combine[idx].weight += statistical_results[idx];
-        combine[idx].arr[combine[idx].cur] = idx;
-        combine[idx].cur += 1;
+        if (ACstatistical_results[idx] == 0) continue;
+        combine[total_size].weight += ACstatistical_results[idx];
+        combine[total_size].arr[0] = idx;
+        combine[total_size].cur += 1;
+        ++total_size;
     }
 
-    int min1, min2;
-    for (idx = 0; idx < BITS_SIZE; ++idx)
+    int min1, min2; // min1 is the index of smallest weight.
+    if (combine[0].weight > combine[1].weight) 
+    { 
+        min1 = 1; min2 = 0;
+    }
+    else 
+    { 
+        min2 = 1; min1 = 0; 
+    }
+    
+    int end = 0;
+    while (!end)
     {
-        
+        end = 1;
+        for (idx = 0; idx < MAX_SYMBOL; ++idx)
+        {
+            if (combine[idx].cur == 0 || idx == min1 || idx == min2 || combine[idx].weight == 0) continue;
+            if (combine[idx].weight < combine[min1].weight)
+            {
+                min2 = min1; min1 = idx;
+            }
+            else if (combine[idx].weight <= combine[min2].weight && combine[idx].weight >= combine[min1].weight)
+            {
+                min2 = idx;
+            }
+            end = 0;
+        }
+        // combine two huffman nodes
+        combine[min1].weight += combine[min2].weight;
+        int tmp;
+        for (tmp = 0; tmp < combine[min2].cur; tmp++)
+        {
+            combine[min1].arr[tmp + combine[min1].cur] = combine[min2].arr[tmp];
+        }
+        combine[min1].cur += combine[min2].cur;
+        combine[min2].cur = 0;
+        // add 1 bit to the combined array
+        for (tmp = 0; tmp < combine[min1].cur; tmp++)
+        {
+            bit_array[combine[min1].arr[tmp]] += 1;
+        }
+        min2 = 0;
+        --total_size;
     }
 
-    //dynamic_array arr;
-    //init_dynamic_array(&arr, sizeof(val_frequency), 64);
-    //val_frequency t = { 0, 0 };
-    //for (idx = 0, total_size = matrix_height * matrix_width; idx < total_size; ++idx)
-    //{
-    //    t.key = idx; t.value = statistical_results[idx];
-    //    arr_insert(&arr, &t, frequence_compare);
-    //}
-    //destory_dynamic_array(&arr);
+    size_t bit, table_pos;
+    uint32_t Codes, Values;
+    for (bit = 1, table_pos = 0; bit < BITS_SIZE; bit++)
+    {
+        for (idx = 0; idx < MAX_SYMBOL; ++idx)
+        {
+            if (bit_array[idx] == bit)
+            {
+                //AC_target_table[pos] = 
+            }
+        }
+    }
 
-    free(statistical_results);
+    calc_huffman_table(header->DC_luma_table, Standard_DC_Luminance_Codes, Standard_DC_Luminance_Values);
+
+    free(DCstatistical_results);
+    free(ACstatistical_results);
 }
 
 Void calc_huffman_table(bit_value *table, uint32_t *BITS, uint32_t *HUFFVAL)
