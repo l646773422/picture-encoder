@@ -32,16 +32,16 @@ cache |= (uint32_t)val << shift;
 // {0, 0, 7 ..} 的意思是总共有长度为3的value有7个，其中value从Standard_DC_Luminance_Values数组中读取。
 // 因此有 sum of Standard_DC_Luminance_Codes[i] = length of (Standard_DC_Luminance_Values)
                                                 //1  2  3  4 
-static uint32_t Standard_DC_Luminance_Codes[] = { 0, 1, 5, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0 };
-static uint32_t Standard_DC_Luminance_Values[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };
+static uint32_t Standard_DC_Luminance_Codes[BITS_SIZE] = { 0, 1, 5, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0 };
+static uint32_t Standard_DC_Luminance_Values[BITS_SIZE] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };
 
 //-------------------------------------------------------------------------------
-static uint32_t Standard_DC_Chrominance_Codes[] = { 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0 };
-static uint32_t Standard_DC_Chrominance_Values[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };
+static uint32_t Standard_DC_Chrominance_Codes[BITS_SIZE] = { 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0 };
+static uint32_t Standard_DC_Chrominance_Values[BITS_SIZE] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };
 
 //-------------------------------------------------------------------------------
-static uint32_t Standard_AC_Luminance_Codes[] = { 0, 2, 1, 3, 3, 2, 4, 3, 5, 5, 4, 4, 0, 0, 1, 0x7d };
-static uint32_t Standard_AC_Luminance_Values[] =
+static uint32_t Standard_AC_Luminance_Codes[BITS_SIZE] = { 0, 2, 1, 3, 3, 2, 4, 3, 5, 5, 4, 4, 0, 0, 1, 0x7d };
+static uint32_t Standard_AC_Luminance_Values[MAX_SYMBOL] =
 {
     0x01, 0x02, 0x03, 0x00, 0x04, 0x11, 0x05, 0x12,
     0x21, 0x31, 0x41, 0x06, 0x13, 0x51, 0x61, 0x07,
@@ -67,8 +67,8 @@ static uint32_t Standard_AC_Luminance_Values[] =
 };
 
 //-------------------------------------------------------------------------------
-static uint32_t Standard_AC_Chrominance_Codes[] = { 0, 2, 1, 2, 4, 4, 3, 4, 7, 5, 4, 4, 0, 1, 2, 0x77 };
-static uint32_t Standard_AC_Chrominance_Values[] =
+static uint32_t Standard_AC_Chrominance_Codes[BITS_SIZE] = { 0, 2, 1, 2, 4, 4, 3, 4, 7, 5, 4, 4, 0, 1, 2, 0x77 };
+static uint32_t Standard_AC_Chrominance_Values[MAX_SYMBOL] =
 {
     0x00, 0x01, 0x02, 0x03, 0x11, 0x04, 0x05, 0x21,
     0x31, 0x06, 0x12, 0x41, 0x51, 0x07, 0x61, 0x71,
@@ -141,7 +141,7 @@ Void encode_restart(stream *bs, frame_header* header);
 Void encode_comment(stream *bs, frame_header* header);
 Void encode_app_data(stream *bs);
 Void encode_end_code(stream *bs);
-Void encode_block(double *coefs, int16_t prev_dc, bit_value *dc_huffman_table, bit_value *ac_huffman_table, stream *bs);
+Void encode_block(double *coefs_8x8, int16_t prev_dc, bit_value *dc_huffman_table, bit_value *ac_huffman_table, stream *bs);
 
 Void color_space_transform(pix *RGB, double *YUV, size_t Y_width, size_t Y_height, sampling_fomat format);
 
@@ -153,15 +153,16 @@ Void copy_block_back(double *src, size_t pos_x, size_t pos_y, size_t pic_width, 
 Void transform_8x8(double *pixels, double *coefs);
 int value_to_code(int32_t value, bit_value *target, coef_type coef);
 
-Void analyse_block_8x8(double *coefs, int16_t prev_dc, int *DC_statistical_results, int *AC_statistical_results);
-Void analyse_coef(double *coefs, size_t matrix_width, size_t matrix_height, int *DC_statistical_results, int *AC_statistical_results);
+Void analyse_block_8x8(double *coefs, int16_t prev_dc, int16_t *DC_statistical_results, int16_t *AC_statistical_results);
+Void analyse_coef(double *coefs, size_t matrix_width, size_t matrix_height, int16_t *DC_statistical_results, int16_t *AC_statistical_results);
 Void create_huffman_table_from_coef(frame_header *header, double *coefs, size_t matrix_width, size_t matrix_height, bit_value *DC_target_table, bit_value *AC_target_table);
 Void calc_huffman_table(bit_value *table, uint32_t *BITS, uint32_t *HUFFVAL);
+Void generate_optimal_huffman_table(frame_header *header, int16_t *statistical_result, uint32_t *codes, uint32_t *values);
 
 Void write_bit_stream(FILE* fp, stream *bs);
 
 Void init_quantization_table(quantization_table *table, uint8_t *coefs);
-Void init_zigzag_table(uint8_t *table);
+Void init_zigzag_table(uint32_t *table);
 Void init_frame_header(frame_header *header);
 
 Void entropy_encoding();

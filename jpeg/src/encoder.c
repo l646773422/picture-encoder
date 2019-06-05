@@ -76,6 +76,10 @@ Void encode_huffman_table(stream *bs, frame_header* header)
     uint16_t size = 0;
     for (i = 0; i < BITS_SIZE; i++)
     {
+        //size += header->DC_luma_Codes[i];
+        //size += header->DC_chroma_Codes[i];
+        //size += header->AC_luma_Codes[i];
+        //size += header->AC_chroma_Codes[i];
         size += Standard_DC_Luminance_Codes[i];
         size += Standard_DC_Chrominance_Codes[i];
         size += Standard_AC_Luminance_Codes[i];
@@ -92,23 +96,29 @@ Void encode_huffman_table(stream *bs, frame_header* header)
                // Tc: 0 -> DC or lossless table, 1 -> AC table. Th: table destination identifier.
     for (i = 0, size = 0; i < BITS_SIZE; i++)
     {
+        //U8(header->DC_luma_Codes[i]);
+        //size += header->DC_luma_Codes[i];
         U8(Standard_DC_Luminance_Codes[i]);
         size += Standard_DC_Luminance_Codes[i];
     }
     for (i = 0; i < size; i++)
     {
         U8(Standard_DC_Luminance_Values[i]);
+        //U8(header->DC_luma_Values[i]);
     }
 
     // DC chroma
     U8(0x01);  // Tc|Th.
     for (i = 0, size = 0; i < BITS_SIZE; i++)
     {
+        //U8(header->DC_chroma_Codes[i]);
+        //size += header->DC_chroma_Codes[i];
         U8(Standard_DC_Chrominance_Codes[i]);
         size += Standard_DC_Chrominance_Codes[i];
     }
     for (i = 0; i < size; i++)
     {
+        //U8(header->DC_chroma_Values[i]);
         U8(Standard_DC_Chrominance_Values[i]);
     }
 
@@ -117,11 +127,14 @@ Void encode_huffman_table(stream *bs, frame_header* header)
                // Tc: 0 -> DC or lossless table, 1 -> AC table. Th: table destination identifier.
     for (i = 0, size = 0; i < BITS_SIZE; i++)
     {
+        //U8(header->AC_luma_Codes[i]);
+        //size += header->AC_luma_Codes[i];
         U8(Standard_AC_Luminance_Codes[i]);
         size += Standard_AC_Luminance_Codes[i];
     }
     for (i = 0; i < size; i++)
     {
+        //U8(header->AC_luma_Values[i]);
         U8(Standard_AC_Luminance_Values[i]);
     }
 
@@ -129,12 +142,15 @@ Void encode_huffman_table(stream *bs, frame_header* header)
     U8(0x11);  // Tc|Th.
     for (i = 0, size = 0; i < BITS_SIZE; i++)
     {
-        U8(Standard_AC_Chrominance_Codes[i]);
-        size += Standard_AC_Chrominance_Codes[i];
+        U8(header->AC_chroma_Codes[i]);
+        size += header->AC_chroma_Codes[i];
+        // U8(Standard_AC_Chrominance_Codes[i]);
+        // size += Standard_AC_Chrominance_Codes[i];
     }
     for (i = 0; i < size; i++)
     {
-        U8(Standard_AC_Chrominance_Values[i]);
+        U8(header->AC_chroma_Values[i]);
+        //U8(Standard_AC_Chrominance_Values[i]);
     }
 
 }
@@ -224,7 +240,6 @@ Void copy_block_back(double *src, size_t pos_x, size_t pos_y, size_t pic_width, 
 Void transform_8x8(double *pixels, double *coefs)
 {
     // before dct, MCU should level shifted.
-    int i;
     double shifted_pixels[BLOCK_PIXELS];
     memset(shifted_pixels, 0, sizeof(shifted_pixels));
 
@@ -268,7 +283,7 @@ Void quantization_8x8(frame_header *header, double *coefs, uint8_t *quant_table)
     }
 }
 
-Void init_zigzag_table(uint8_t *table)
+Void init_zigzag_table(uint32_t *table)
 {
 
     // There get a zigzag scan.
@@ -297,21 +312,21 @@ Void init_zigzag_table(uint8_t *table)
             if (x == BLOCK_COLUMN - 1)
             {
                 ++y;
-                table[scan_counter] = x + y*BLOCK_COLUMN;
+                table[scan_counter] = (uint32_t)(x + y*BLOCK_COLUMN);
                 //printf("%d,", scan_sequence[x + y*BLOCK_COLUMN]);
                 break;
             }
             if (y == 0)
             {
                 ++x;
-                table[scan_counter] = x + y*BLOCK_COLUMN;
+                table[scan_counter] = (uint32_t)(x + y*BLOCK_COLUMN);
                 break;
             }
 
             x += 1;
             y -= 1;
             ++scan_counter;
-            table[scan_counter] = x + y*BLOCK_COLUMN;
+            table[scan_counter] = (uint32_t)(x + y*BLOCK_COLUMN);
         }
         while (down)
         {
@@ -322,25 +337,25 @@ Void init_zigzag_table(uint8_t *table)
             if (y == BLOCK_ROW - 1)
             {
                 ++x;
-                table[scan_counter] = x + y*BLOCK_COLUMN;
+                table[scan_counter] = (uint32_t)(x + y*BLOCK_COLUMN);
                 break;
             }
             if (x == 0)
             {
                 ++y;
-                table[scan_counter] = x + y*BLOCK_COLUMN;
+                table[scan_counter] = (uint32_t)(x + y*BLOCK_COLUMN);
                 break;
             }
 
             x -= 1;
             y += 1;
             ++scan_counter;
-            table[scan_counter] = x + y*BLOCK_COLUMN;
+            table[scan_counter] = (uint32_t)(x + y*BLOCK_COLUMN);
         }
     }
 }
 
-Void encode_block(double *coefs, int16_t prev_dc, bit_value *dc_huffman_table, bit_value *ac_huffman_table, stream *bs)
+Void encode_block(double *coefs_8x8, int16_t prev_dc, bit_value *dc_huffman_table, bit_value *ac_huffman_table, stream *bs)
 {
     // The biggest problem is how to realize zigzag scan.
     // I dont want a fixed array. (although look up is more efficient)
@@ -354,11 +369,12 @@ Void encode_block(double *coefs, int16_t prev_dc, bit_value *dc_huffman_table, b
 
 
     // encode DC
-    int16_t dc_diff = (int16_t)coefs[0] - prev_dc;
+    int16_t dc_diff = (int16_t)coefs_8x8[0] - prev_dc;
     bit_value coef_result, huffman_code;
     if (dc_diff == 0)
     {
         memcpy(&huffman_code, dc_huffman_table, sizeof(bit_value));
+        assert(huffman_code.length != 0);
         U(huffman_code.length, huffman_code.code);
     }
     else
@@ -366,6 +382,7 @@ Void encode_block(double *coefs, int16_t prev_dc, bit_value *dc_huffman_table, b
         value_to_code(dc_diff, &coef_result, DC_COEF);
         // after get bits of code, check huffman table for huffman code.
         memcpy(&huffman_code, dc_huffman_table + coef_result.length, sizeof(bit_value));
+        assert(huffman_code.length != 0);
         U(huffman_code.length, huffman_code.code);
         U(coef_result.length, coef_result.code);
     }
@@ -377,7 +394,7 @@ Void encode_block(double *coefs, int16_t prev_dc, bit_value *dc_huffman_table, b
     {
         //printf("%d ", zigzag[x_sequence[scan_counter] + y_sequence[scan_counter] * BLOCK_COLUMN]);
         idx = zigzag[scan_counter];
-        coef = (int16_t)coefs[idx];
+        coef = (int16_t)coefs_8x8[idx];
         if (coef == 0)
         {
             zero_counter += 1;
@@ -386,17 +403,19 @@ Void encode_block(double *coefs, int16_t prev_dc, bit_value *dc_huffman_table, b
                 // check wether zero remain behind. If all zero, encode EOB (end of block)
                 // TODO: find the last non-zero element at scan start! And check (tmp_scan == last_non_zero) will know encode EOB or ZRL.
                 for (tmp_scan = scan_counter; tmp_scan < BLOCK_PIXELS; tmp_scan++)
-                    if (coefs[zigzag[tmp_scan]] != 0) break;
+                    if (coefs_8x8[zigzag[tmp_scan]] != 0) break;
                 if (tmp_scan == BLOCK_PIXELS)
                 {
                     // encode EOB
                     memcpy(&huffman_code, ac_huffman_table, sizeof(bit_value));
+                    assert(huffman_code.length != 0);
                     U(huffman_code.length, huffman_code.code); // code EOB only.
                     return;
                 }
                 else
                 {
                     memcpy(&huffman_code, ac_huffman_table + 0xF0, sizeof(bit_value));
+                    assert(huffman_code.length != 0);
                     U(huffman_code.length, huffman_code.code); // code ZRL only.
                 }
                 scan_counter = tmp_scan;
@@ -413,6 +432,7 @@ Void encode_block(double *coefs, int16_t prev_dc, bit_value *dc_huffman_table, b
             zero_counter = 0;
             // after get bits of code, check huffman table for huffman code.
             memcpy(&huffman_code, ac_huffman_table + symbol, sizeof(bit_value));
+            assert(huffman_code.length != 0);
             U(huffman_code.length, huffman_code.code);
             U(coef_result.length, coef_result.code);
 
@@ -539,10 +559,27 @@ Void init_frame_header(frame_header *header)
     init_quantization_table(&header->luma_quantization_table, Standard_Luma_Quantization_Table);
     init_quantization_table(&header->chroma_quantization_table, Standard_Chroma_Quantization_Table);
     
-    calc_huffman_table(header->DC_luma_table, Standard_DC_Luminance_Codes, Standard_DC_Luminance_Values);
-    calc_huffman_table(header->DC_chroma_table, Standard_DC_Chrominance_Codes, Standard_DC_Chrominance_Values);
-    calc_huffman_table(header->AC_luma_table, Standard_AC_Luminance_Codes, Standard_AC_Luminance_Values);
-    calc_huffman_table(header->AC_chroma_table, Standard_AC_Chrominance_Codes, Standard_AC_Chrominance_Values);
+    memcpy(header->DC_luma_Codes,  Standard_DC_Luminance_Codes, sizeof(uint32_t)*BITS_SIZE);
+    memcpy(header->DC_luma_Values, Standard_DC_Luminance_Values, sizeof(uint32_t)*BITS_SIZE);
+
+    memcpy(header->DC_chroma_Codes,  Standard_DC_Chrominance_Codes, sizeof(uint32_t)*BITS_SIZE);
+    memcpy(header->DC_chroma_Values, Standard_DC_Chrominance_Values, sizeof(uint32_t)*BITS_SIZE);
+
+    memcpy(header->AC_luma_Codes,  Standard_AC_Luminance_Codes, sizeof(uint32_t)*BITS_SIZE);
+    memcpy(header->AC_luma_Values, Standard_AC_Luminance_Values, sizeof(uint32_t)*MAX_SYMBOL);
+
+    memcpy(header->AC_chroma_Codes,  Standard_AC_Chrominance_Codes, sizeof(uint32_t)*BITS_SIZE);
+    memcpy(header->AC_chroma_Values, Standard_AC_Chrominance_Values, sizeof(uint32_t)*MAX_SYMBOL);
+
+    memset(header->AC_luma_table, 0, sizeof(bit_value)*MAX_SYMBOL);
+    memset(header->AC_chroma_table, 0, sizeof(bit_value)*MAX_SYMBOL);
+    memset(header->DC_luma_table, 0, sizeof(bit_value)*BITS_SIZE);
+    memset(header->DC_chroma_table, 0, sizeof(bit_value)*BITS_SIZE);
+
+    calc_huffman_table(header->DC_luma_table, header->DC_luma_Codes, header->DC_luma_Values);
+    calc_huffman_table(header->DC_chroma_table, header->DC_chroma_Codes, header->DC_chroma_Values);
+    calc_huffman_table(header->AC_luma_table, header->AC_luma_Codes, header->AC_luma_Values);
+    calc_huffman_table(header->AC_chroma_table, header->AC_chroma_Codes, header->AC_chroma_Values);
 }
 
 Void init_quantization_table(quantization_table *table, uint8_t *coefs)
@@ -559,12 +596,12 @@ static Void insert()
 
 }
 
-Void analyse_block_8x8(double *coefs, int16_t prev_dc, int *DC_statistical_results, int *AC_statistical_results)
+Void analyse_block_8x8(double *coefs, int16_t prev_dc, int16_t *DC_statistical_results, int16_t *AC_statistical_results)
 {
     size_t zero_counter = 0, idx = 0;
     size_t scan_counter = 1;
     int16_t dc_diff = (int16_t)coefs[0] - prev_dc;
-    bit_value coef_result, huffman_code;
+    bit_value coef_result;
 
     size_t tmp_scan = -1;
     int16_t coef;
@@ -623,11 +660,8 @@ Void analyse_block_8x8(double *coefs, int16_t prev_dc, int *DC_statistical_resul
 }
 
 // Input: coef after quant.
-Void analyse_coef(double *coefs, size_t matrix_width, size_t matrix_height, int *DC_statistical_results, int *AC_statistical_results)
+Void analyse_coef(double *coefs, size_t matrix_width, size_t matrix_height, int16_t *DC_statistical_results, int16_t *AC_statistical_results)
 {
-    size_t x, y;
-    int index;
-    bit_value target;
     size_t resolution = matrix_width * matrix_height;
     // get DC and AC statistc result.
     assert(resolution % 64 == 0);
@@ -651,26 +685,15 @@ static int frequence_compare(val_frequency *t1, val_frequency *t2, size_t _elem_
     return t1->value - t2->value;
 }
 
-// the key to build a huffman table, is to get the frequency of bits (which record coef will cost)
-Void create_huffman_table_from_coef(frame_header *header, double *coefs, size_t matrix_width, size_t matrix_height, bit_value *DC_target_table, bit_value *AC_target_table)
+Void generate_optimal_huffman_table(frame_header *header, int16_t *statistical_result, uint32_t *codes, uint32_t *values)
 {
     size_t idx, total_size;
-    int *DCstatistical_results, *ACstatistical_results;
-
-    DCstatistical_results = (int*)malloc(sizeof(int) * (1 << 8));
-    memset(DCstatistical_results, 0, sizeof(int) * (1 << 8));
-    ACstatistical_results = (int*)malloc(sizeof(int) * (1 << 8));
-    memset(ACstatistical_results, 0, sizeof(int) * (1 << 8));
-
-    analyse_coef(coefs, matrix_width, matrix_height, DCstatistical_results, ACstatistical_results);
-    
-
     huffman_node *combine;
     size_t bit_array[MAX_SYMBOL];
     memset(bit_array, 0, sizeof(size_t)*MAX_SYMBOL);
     combine = (huffman_node *)malloc(sizeof(huffman_node) * MAX_SYMBOL);
     memset(combine, 0, sizeof(sizeof(huffman_node) * MAX_SYMBOL));
-    
+
     for (idx = 0; idx < MAX_SYMBOL; ++idx)
     {
         combine[idx].arr = (int32_t*)malloc(sizeof(int32_t) * MAX_SYMBOL);
@@ -681,23 +704,23 @@ Void create_huffman_table_from_coef(frame_header *header, double *coefs, size_t 
 
     for (idx = 0, total_size = 0; idx < MAX_SYMBOL; ++idx)
     {
-        if (ACstatistical_results[idx] == 0) continue;
-        combine[total_size].weight += ACstatistical_results[idx];
+        if (statistical_result[idx] == 0) continue;
+        combine[total_size].weight += statistical_result[idx];
         combine[total_size].arr[0] = idx;
         combine[total_size].cur += 1;
         ++total_size;
     }
 
     int min1, min2; // min1 is the index of smallest weight.
-    if (combine[0].weight > combine[1].weight) 
-    { 
+    if (combine[0].weight > combine[1].weight)
+    {
         min1 = 1; min2 = 0;
     }
-    else 
-    { 
-        min2 = 1; min1 = 0; 
+    else
+    {
+        min2 = 1; min1 = 0;
     }
-    
+
     int end = 0;
     while (!end)
     {
@@ -717,7 +740,7 @@ Void create_huffman_table_from_coef(frame_header *header, double *coefs, size_t 
         }
         // combine two huffman nodes
         combine[min1].weight += combine[min2].weight;
-        int tmp;
+        size_t tmp;
         for (tmp = 0; tmp < combine[min2].cur; tmp++)
         {
             combine[min1].arr[tmp + combine[min1].cur] = combine[min2].arr[tmp];
@@ -734,22 +757,50 @@ Void create_huffman_table_from_coef(frame_header *header, double *coefs, size_t 
     }
 
     size_t bit, table_pos;
-    uint32_t Codes, Values;
+    for (idx = 0; idx < MAX_SYMBOL; ++idx)
+    {
+        if (bit_array[idx] != 0)
+        {
+            codes[bit_array[idx] - 1] += 1;
+        }
+    }
+
     for (bit = 1, table_pos = 0; bit < BITS_SIZE; bit++)
     {
         for (idx = 0; idx < MAX_SYMBOL; ++idx)
         {
-            if (bit_array[idx] == bit)
-            {
-                //AC_target_table[pos] = 
-            }
+            if (bit_array[idx] == bit) { values[table_pos++] = idx; }
         }
     }
+}
 
-    calc_huffman_table(header->DC_luma_table, Standard_DC_Luminance_Codes, Standard_DC_Luminance_Values);
+// the key to build a huffman table, is to get the frequency of bits (which record coef will cost)
+Void create_huffman_table_from_coef(frame_header *header, double *coefs, size_t matrix_width, size_t matrix_height, bit_value *DC_target_table, bit_value *AC_target_table)
+{
+    int16_t DCstatistical_results[MAX_SYMBOL], ACstatistical_results[MAX_SYMBOL];
+    uint32_t Codes[BITS_SIZE], Values[MAX_SYMBOL];
 
-    free(DCstatistical_results);
-    free(ACstatistical_results);
+    memset(DCstatistical_results, 0, sizeof(int16_t) * MAX_SYMBOL);
+    memset(ACstatistical_results, 0, sizeof(int16_t) * MAX_SYMBOL);
+
+    analyse_coef(coefs, matrix_width, matrix_height, DCstatistical_results, ACstatistical_results);
+    
+    memset(Codes, 0, sizeof(uint32_t)*BITS_SIZE);
+    memset(Values, 0, sizeof(uint32_t)*MAX_SYMBOL);
+    memset(DC_target_table, 0, sizeof(bit_value) * BITS_SIZE);
+    generate_optimal_huffman_table(header, DCstatistical_results, Codes, Values);
+    memcpy(header->DC_luma_Codes, Codes, sizeof(uint32_t)*BITS_SIZE);
+    memcpy(header->DC_luma_Values, Values, sizeof(uint32_t)*BITS_SIZE);
+    calc_huffman_table(DC_target_table, Codes, Values);
+
+    memset(Codes, 0, sizeof(uint32_t)*BITS_SIZE);
+    memset(Values, 0, sizeof(uint32_t)*MAX_SYMBOL);
+    memset(AC_target_table, 0, sizeof(bit_value) * MAX_SYMBOL);
+    generate_optimal_huffman_table(header, ACstatistical_results, Codes, Values);
+    memcpy(header->AC_luma_Codes, Codes, sizeof(uint32_t)*BITS_SIZE);
+    memcpy(header->AC_luma_Values, Values, sizeof(uint32_t)*MAX_SYMBOL);
+    calc_huffman_table(AC_target_table, Codes, Values);
+
 }
 
 Void calc_huffman_table(bit_value *table, uint32_t *BITS, uint32_t *HUFFVAL)

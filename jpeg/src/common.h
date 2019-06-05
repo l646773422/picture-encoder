@@ -101,10 +101,19 @@ typedef struct frame_header{
     pix *src_rgb;
 
     uint8_t hf_tables; // in baseline, only support 4 huffman tables.
-    bit_value DC_luma_table[12];
-    bit_value DC_chroma_table[12];
-    bit_value AC_luma_table[256];
-    bit_value AC_chroma_table[256];
+    bit_value DC_luma_table[BITS_SIZE];
+    bit_value DC_chroma_table[BITS_SIZE];
+    bit_value AC_luma_table[MAX_SYMBOL];
+    bit_value AC_chroma_table[MAX_SYMBOL];
+
+    uint32_t DC_luma_Codes[BITS_SIZE];
+    uint32_t DC_luma_Values[BITS_SIZE];
+    uint32_t DC_chroma_Codes[BITS_SIZE];
+    uint32_t DC_chroma_Values[BITS_SIZE];
+    uint32_t AC_luma_Codes[BITS_SIZE];
+    uint32_t AC_luma_Values[MAX_SYMBOL];
+    uint32_t AC_chroma_Codes[BITS_SIZE];
+    uint32_t AC_chroma_Values[MAX_SYMBOL];
 
     //uint8_t qz_tables;
     quantization_table luma_quantization_table;

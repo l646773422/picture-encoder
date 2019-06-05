@@ -15,7 +15,6 @@ int main()
     double pixels_8x8[BLOCK_PIXELS];
 
     size_t pic_width, pic_height;
-    size_t idx;
     pic_width = pic_height = 256;
 
     header.frame_height = pic_height;
@@ -65,20 +64,20 @@ int main()
             transform_8x8(pixels_8x8, coefs_8x8);
             quantization_8x8(&header, coefs_8x8, header.luma_quantization_table.coefs);
             encode_block(coefs_8x8, y_prev, header.DC_luma_table, header.AC_luma_table, &bs);
-            y_prev = coefs_8x8[0];
+            y_prev = (int16_t)coefs_8x8[0];
 
 
             copy_block(u, pos_x, pos_y, pic_width, pixels_8x8);
             transform_8x8(pixels_8x8, coefs_8x8);
             quantization_8x8(&header, coefs_8x8, header.chroma_quantization_table.coefs);
             encode_block(coefs_8x8, u_prev, header.DC_chroma_table, header.AC_chroma_table, &bs);
-            u_prev = coefs_8x8[0];
+            u_prev = (int16_t)coefs_8x8[0];
 
             copy_block(v, pos_x, pos_y, pic_width, pixels_8x8);
             transform_8x8(pixels_8x8, coefs_8x8);
             quantization_8x8(&header, coefs_8x8, header.chroma_quantization_table.coefs);
             encode_block(coefs_8x8, v_prev, header.DC_chroma_table, header.AC_chroma_table, &bs);
-            v_prev = coefs_8x8[0];
+            v_prev = (int16_t)coefs_8x8[0];
             if (bs.buf - bs.origin > 256)
             {
                 write_bit_stream(fp, &bs);
