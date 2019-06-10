@@ -2,9 +2,12 @@
 #define JPG_COMMON_H
 
 #include <stdint.h>
+#include <assert.h>
 #include <stdlib.h> 
 #include <memory.h>
 
+#define true 1
+#define false 0
 #define BITS_SIZE 16
 #define MAX_SYMBOL 256
 #define QUANTIZATION_TABLE_SIZE  64 // 8*8 block
@@ -48,6 +51,7 @@ static const double transform_talbe[8][8] = {
 typedef void Void;
 typedef uint8_t pix;
 typedef uint8_t byte;
+typedef char Bool;
 
 typedef uint32_t bs_t;
 
@@ -126,51 +130,11 @@ typedef struct frame_header{
 #define U16(v) bs_put_bits(bs, 16, v)
 #define CODE_BIT_VALUE(b_v) bs_put_bits(bs, b_v.length, b_v.code);
 
-static Void bs_put_bits(stream *bs, uint8_t n, uint32_t val)
-{
-    assert(!(val >> n));
-    bs->shift -= n;
-    assert((unsigned)n <= 32);
-    if (bs->shift < 0)
-    {
-        assert(-bs->shift < 32);
-        bs->cache |= val >> -bs->shift;
-        *bs->buf++ = SWAP32(bs->cache);
-        bs->shift = 32 + bs->shift;
-        bs->cache = 0;
-    }
-    bs->cache |= val << bs->shift;
-}
-
-static Void init_bit_stream(stream* bs)
-{
-    memset(bs, 0, sizeof(stream));
-    bs->origin = (bs_t*)malloc(sizeof(bs_t) * BIT_BUFF_SIZE);
-    memset(bs->origin, 0, sizeof(bs_t) * BIT_BUFF_SIZE);
-
-    bs->shift = 32;
-    bs->buf = bs->origin;
-}
-
-static Void clear_bit_stream(stream* bs)
-{
-    bs->buf = bs->origin;
-    bs->cache = 0;
-    bs->shift = 32;
-}
-
-static Void destory_bit_stream(stream* bs)
-{
-    free(bs->origin);
-    memset(bs, 0, sizeof(stream));
-}
-
-static Void flush_stream(stream* bs)
-{
-    *bs->buf++ = SWAP32(bs->cache);
-    bs->cache = 0;
-    bs->shift = 32;
-}
+Void bs_put_bits(stream *bs, uint8_t n, uint32_t val);
+Void init_bit_stream(stream* bs);
+Void clear_bit_stream(stream* bs);
+Void destory_bit_stream(stream* bs);
+Void flush_stream(stream* bs);
 
 typedef struct dynamic_array
 {
@@ -203,72 +167,74 @@ typedef struct key_value
 
 typedef key_value val_frequency;
 
-static Void init_dynamic_array(dynamic_array *arr, size_t element_size, size_t length)
-{
-    arr->cur = 0;
-    arr->element_size = element_size;
-    arr->length = length;
-    arr->buf = malloc(element_size * length);
-    memset(arr->buf, 0, element_size * length);
-}
+//static Void init_dynamic_array(dynamic_array *arr, size_t element_size, size_t length)
+//{
+//    arr->cur = 0;
+//    arr->element_size = element_size;
+//    arr->length = length;
+//    arr->buf = malloc(element_size * length);
+//    memset(arr->buf, 0, element_size * length);
+//}
+//
+//static Void destory_dynamic_array(dynamic_array *arr)
+//{
+//    free(arr->buf);
+//    arr->buf = NULL;
+//}
+//
+//static Void arr_expand(dynamic_array *arr)
+//{
+//    assert(arr);
+//    Void *buf = malloc(arr->length * arr->element_size * 2);
+//    if (buf == NULL) return;
+//    memcpy(buf, arr->buf, arr->cur * arr->element_size);
+//    arr->length *= 2;
+//    free(arr->buf);
+//    arr->buf = buf;
+//}
+//
+//static Void arr_append(dynamic_array *arr, Void *element)
+//{
+//    assert(arr);
+//    assert(element);
+//    uint8_t *ptr = arr->buf;
+//    if (arr->cur >= 0.8*arr->length)
+//    {
+//        arr_expand(arr);
+//    }
+//    if (arr->cur == arr->length) return;
+//    memcpy(ptr + arr->cur++ * arr->element_size, element, arr->element_size);
+//}
+//
+//static Void arr_insert(dynamic_array *arr, Void *element, int (*func)(Void *, Void*, size_t _elem_size) )
+//{
+//    assert(arr);
+//    assert(element);
+//    uint8_t *ptr = arr->buf;
+//    size_t target_pos = 0;
+//    if (arr->cur >= 0.8*arr->length)
+//    {
+//        arr_expand(arr);
+//    }
+//    if (arr->cur == arr->length) return; // if expand failed, and array if full.
+//
+//    if (func == NULL) func = memcmp;
+//
+//
+//    // Use memcmp for temporary needs.  TODO: pass compare function to compare.
+//    while (target_pos <= arr->cur)
+//    {
+//        if (func(ptr + target_pos*arr->element_size, element, arr->element_size) < 0)
+//        {
+//            // 
+//            memmove(ptr + (target_pos + 1)*arr->element_size, ptr + target_pos*arr->element_size, (arr->cur - target_pos)*arr->element_size);
+//            memcpy(ptr + target_pos*arr->element_size, element, arr->element_size);
+//        }
+//    }
+//
+//}
 
-static Void destory_dynamic_array(dynamic_array *arr)
-{
-    free(arr->buf);
-    arr->buf = NULL;
-}
-
-static Void arr_expand(dynamic_array *arr)
-{
-    assert(arr);
-    Void *buf = malloc(arr->length * arr->element_size * 2);
-    if (buf == NULL) return;
-    memcpy(buf, arr->buf, arr->cur * arr->element_size);
-    arr->length *= 2;
-    free(arr->buf);
-    arr->buf = buf;
-}
-
-static Void arr_append(dynamic_array *arr, Void *element)
-{
-    assert(arr);
-    assert(element);
-    uint8_t *ptr = arr->buf;
-    if (arr->cur >= 0.8*arr->length)
-    {
-        arr_expand(arr);
-    }
-    if (arr->cur == arr->length) return;
-    memcpy(ptr + arr->cur++ * arr->element_size, element, arr->element_size);
-}
-
-static Void arr_insert(dynamic_array *arr, Void *element, int (*func)(Void *, Void*, size_t _elem_size) )
-{
-    assert(arr);
-    assert(element);
-    uint8_t *ptr = arr->buf;
-    size_t target_pos = 0;
-    if (arr->cur >= 0.8*arr->length)
-    {
-        arr_expand(arr);
-    }
-    if (arr->cur == arr->length) return; // if expand failed, and array if full.
-
-    if (func == NULL) func = memcmp;
-
-
-    // Use memcmp for temporary needs.  TODO: pass compare function to compare.
-    while (target_pos <= arr->cur)
-    {
-        if (func(ptr + target_pos*arr->element_size, element, arr->element_size) < 0)
-        {
-            // 
-            memmove(ptr + (target_pos + 1)*arr->element_size, ptr + target_pos*arr->element_size, (arr->cur - target_pos)*arr->element_size);
-            memcpy(ptr + target_pos*arr->element_size, element, arr->element_size);
-        }
-    }
-
-}
-
+Void copy_block(double *src, size_t pos_x, size_t pos_y, size_t pic_width, double* target);
+Void copy_block_back(double *src, size_t pos_x, size_t pos_y, size_t pic_width, double* target);
 
 #endif

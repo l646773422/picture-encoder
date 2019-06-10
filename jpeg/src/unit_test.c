@@ -18,7 +18,7 @@ do {\
 
 #define TEST_TRANSFORM_8X8(coef1, coef2) TEST_ARRAY(coef1, coef2, BLOCK_PIXELS, 1e-5, "%.6f")
 
-#define TEST_COPY_BLOCK_8X8(block1, block2) TEST_ARRAY(block1, block2, BLOCK_PIXELS, 1e-5, "%d")
+#define TEST_COPY_BLOCK_8X8(block1, block2) TEST_ARRAY(block1, block2, BLOCK_PIXELS, 1e-5, "%.3f")
 
 #define test_abs(x) ((x) >= 0 ? (x) : (-x))
 
@@ -202,7 +202,7 @@ Void test_copy_block()
         -8,-6,-4,-4,-2,-2,-2,-3,
     };
 
-    pix Cb[] = {
+    double Cb[] = {
         13,12,11,10,9,8,7,7,
         12,10,9,8,7,6,5,4,
         10,9,8,7,6,4,3,3,
@@ -212,7 +212,7 @@ Void test_copy_block()
         4,3,2,1,1,1,1,1,
         2,2,1,1,1,1,1,1,
     };
-    pix Cr[] = {
+    double Cr[] = {
         -41,-36,-33,-31,-28,-25,-23,-21,
         -37,-32,-29,-26,-23,-19,-17,-14,
         -32,-29,-25,-22,-18,-14,-11,-9,
@@ -223,7 +223,7 @@ Void test_copy_block()
         -8,-6,-4,-4,-2,-2,-2,-3,
     };
 
-    double *block = (pix*)malloc(sizeof(double)*BLOCK_PIXELS); memset(block, 0, sizeof(double)*BLOCK_PIXELS);
+    double *block = (double*)malloc(sizeof(double)*BLOCK_PIXELS); memset(block, 0, sizeof(double)*BLOCK_PIXELS);
 
     copy_block(YUV, 0, 8, 8, block);
     TEST_COPY_BLOCK_8X8(block, Cb);

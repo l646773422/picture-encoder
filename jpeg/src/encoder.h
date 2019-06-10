@@ -1,5 +1,5 @@
-#ifndef ENCODER_H
-#define ENCODER_H
+#ifndef JPG_ENCODER_H
+#define JPG_ENCODER_H
 // we only implement baseline process
 
 // which support
@@ -148,8 +148,6 @@ Void color_space_transform(pix *RGB, double *YUV, size_t Y_width, size_t Y_heigh
 
 Void quantization_8x8(frame_header *header, double *coefs, uint8_t *quant_table);
 Void component_down_sampling();
-Void copy_block(double *src, size_t pos_x, size_t pos_y, size_t pic_width, double* target);
-Void copy_block_back(double *src, size_t pos_x, size_t pos_y, size_t pic_width, double* target);
 Void transform_8x8(double *pixels, double *coefs);
 int value_to_code(int32_t value, bit_value *target, coef_type coef);
 

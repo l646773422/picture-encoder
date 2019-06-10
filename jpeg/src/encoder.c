@@ -206,36 +206,6 @@ Void component_down_sampling()
 
 }
 
-Void copy_block(double *src, size_t pos_x, size_t pos_y, size_t pic_width, double* target)
-{
-    int x, y;
-    assert(!(pos_x % 8) && !(pos_y % 8));
-    assert(pic_width > 0);
-
-    double *tmp_src = src + pos_x + pos_y*pic_width;
-
-    for (y = 0; y < BLOCK_ROW; y++)
-    {
-        for (x = 0; x < BLOCK_COLUMN; x++)
-            target[x + y*BLOCK_COLUMN] = tmp_src[x + y*pic_width];
-        //memcpy(target+y*BLOCK_ROW, tmp_src + y*pic_width, BLOCK_COLUMN*sizeof(pix));
-    }
-}
-
-Void copy_block_back(double *src, size_t pos_x, size_t pos_y, size_t pic_width, double* target)
-{
-    int x, y;
-    assert(!(pos_x % 8) && !(pos_y % 8));
-    assert(pic_width > 0);
-
-    double *tmp_src = src + pos_x + pos_y*pic_width;
-
-    for (y = 0; y < BLOCK_ROW; y++)
-    {
-        for (x = 0; x < BLOCK_COLUMN; x++)
-            tmp_src[x + y*pic_width] = target[x + y*BLOCK_COLUMN];
-    }
-}
 
 Void transform_8x8(double *pixels, double *coefs)
 {
